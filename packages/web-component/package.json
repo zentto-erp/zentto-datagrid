@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "High-performance data grid web component. 90+ features, 0 framework dependencies. Free & open-source alternative to AG Grid Enterprise and MUI X Premium.",
   "type": "module",
   "main": "dist/zentto-grid.js",
@@ -11,7 +11,10 @@
       "import": "./dist/zentto-grid.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -29,5 +32,14 @@
     "type": "git",
     "url": "https://github.com/zentto-erp/zentto-datagrid"
   },
-  "keywords": ["datagrid", "web-component", "custom-element", "table", "grid", "lit", "pivot", "grouping"]
+  "keywords": [
+    "datagrid",
+    "web-component",
+    "custom-element",
+    "table",
+    "grid",
+    "lit",
+    "pivot",
+    "grouping"
+  ]
 }

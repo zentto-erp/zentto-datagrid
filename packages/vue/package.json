@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-vue",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Vue 3 wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -29,5 +32,14 @@
     "type": "git",
     "url": "https://github.com/zentto-erp/zentto-datagrid"
   },
-  "keywords": ["datagrid", "vue", "vue3", "table", "grid", "web-component", "pivot", "zentto"]
+  "keywords": [
+    "datagrid",
+    "vue",
+    "vue3",
+    "table",
+    "grid",
+    "web-component",
+    "pivot",
+    "zentto"
+  ]
 }

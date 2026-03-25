@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-core",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Pure logic engine for ZenttoDataGrid — sort, filter, group, pivot, aggregate, export. Zero UI dependencies.",
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -26,5 +29,14 @@
     "type": "git",
     "url": "https://github.com/zentto-erp/zentto-datagrid"
   },
-  "keywords": ["datagrid", "table", "grid", "pivot", "grouping", "filter", "sort", "export"]
+  "keywords": [
+    "datagrid",
+    "table",
+    "grid",
+    "pivot",
+    "grouping",
+    "filter",
+    "sort",
+    "export"
+  ]
 }
