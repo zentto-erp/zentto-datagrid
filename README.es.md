@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>El data grid gratuito y open-source con funcionalidades enterprise.</strong><br />
-  120+ funcionalidades. Sin dependencia de framework. Un solo web component.
+  100+ funcionalidades. Sin dependencia de framework. React, Vue, Angular o HTML vanilla.
 </p>
 
 <p align="center">
@@ -55,6 +55,14 @@ La mayoria de los data grids enterprise cobran cientos o miles de dolares por de
 | Menu de columna (3 puntitos) | Si | Pro | Enterprise |
 | 7 plantillas de celda (avatar, chip, flag...) | Si | No | No |
 | Motor de formulas (SUM, IF, ROUND) | Si | No | No |
+| Virtual scroll (100K+ filas) | Si | Si | Si |
+| Sparklines (mini graficos en celdas) | Si | No | Si |
+| Deshacer/Rehacer (Ctrl+Z/Y) | Si | No | Si |
+| Seleccion de rango tipo Excel | Si | No | Si |
+| Pegar desde Excel (Ctrl+V) | Si | No | Si |
+| Accesibilidad ARIA + teclado | Si | Si | Si |
+| Wrapper Vue 3 | Si | No | No |
+| Wrapper Angular 17+ | Si | No | Si |
 | Shadow DOM (estilos aislados) | Si | No | No |
 | Tamano del bundle (gzipped) | ~18 KB | ~200 KB | ~300 KB |
 
@@ -123,10 +131,13 @@ La mayoria de los data grids enterprise cobran cientos o miles de dolares por de
 - **Moneda** -- formato ISO 4217 adaptado al locale
 - **Renderizador personalizado** -- `renderCell(value, row)` retorna HTML
 
-### Seleccion de Filas
+### Seleccion de Filas y Clipboard
 - Checkbox con multiseleccion
 - Select All en cabecera
 - Shift+Click para seleccion de rango
+- **Seleccion de rango tipo Excel** (click+arrastrar, Shift+Flechas) `NUEVO v0.2`
+- **Copiar rango seleccionado** (Ctrl+C) `NUEVO v0.2`
+- **Pegar desde Excel / Google Sheets** (Ctrl+V) `NUEVO v0.2`
 - Getter publico `selectedRows`
 - Evento `selection-change`
 
@@ -161,6 +172,44 @@ La mayoria de los data grids enterprise cobran cientos o miles de dolares por de
 - `=ROUND({total}/1.16, 2)`
 - `=IF({stock} > 100, "Alto", "Bajo")`
 - Se definen declarativamente como props
+
+### Virtual Scroll `NUEVO v0.2`
+- Renderiza solo las filas visibles para datasets de 100K+ sin lag
+- Overscan configurable (filas extra arriba/abajo del viewport)
+- Activar con `enable-virtual-scroll`
+
+### Sparklines `NUEVO v0.2`
+- Mini graficos SVG dentro de las celdas del grid
+- Tres tipos: `line`, `bar`, `area`
+- Color configurable, detecta tendencia automaticamente (sube/baja/plano)
+- Se define por columna: `{ sparkline: 'line', sparklineField: 'historial' }`
+
+### Deshacer/Rehacer `NUEVO v0.2`
+- Historial completo de ediciones con Ctrl+Z (deshacer) y Ctrl+Y (rehacer)
+- Registra ediciones de celda, agregar/eliminar filas y pegar
+- Botones en toolbar con `enable-undo-redo`
+- Stack configurable (por defecto 200 acciones)
+
+### Seleccion de Rango tipo Excel `NUEVO v0.2`
+- Click+arrastrar para seleccionar un rango de celdas
+- Shift+Flechas para extender la seleccion
+- Ctrl+C copia el rango como texto tabulado
+- Evento `range-select` con coordenadas
+- Activar con `enable-range-selection`
+
+### Pegar desde Excel `NUEVO v0.2`
+- Ctrl+V pega datos tabulados desde Excel, Google Sheets o cualquier hoja de calculo
+- Auto-convierte tipos numericos y booleanos segun la definicion de columna
+- Se integra con deshacer/rehacer (el pegado se puede deshacer)
+- Activar con `enable-paste`
+
+### Accesibilidad `NUEVO v0.2`
+- Roles ARIA: `grid`, `row`, `gridcell`, `columnheader`, `rowgroup`
+- `aria-sort` en columnas ordenables (ascending/descending/none)
+- `aria-selected` en celdas activas y filas seleccionadas
+- `aria-rowindex` y `aria-colindex` para navegacion con lector de pantalla
+- Navegacion completa por teclado (Flechas, Tab, Enter, F2, Escape)
+- Outlines focus-visible en todos los elementos interactivos
 
 ### Master-Detail
 - Filas expandibles con renderizador personalizado
@@ -246,7 +295,58 @@ export default function App() {
 }
 ```
 
-> `<zentto-grid>` es un web component estandar. Ya funciona en **Vue**, **Angular**, **Svelte** y **.NET Blazor** sin wrapper.
+### Vue 3
+
+```bash
+npm install @zentto/datagrid-vue
+```
+
+```vue
+<template>
+  <ZenttoDataGrid :columns="columns" :rows="rows" show-totals locale="es" @row-click="onRowClick" />
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import { ZenttoDataGrid } from '@zentto/datagrid-vue';
+import type { ColumnDef } from '@zentto/datagrid-vue';
+
+const columns: ColumnDef[] = [
+  { field: 'nombre', header: 'Nombre', sortable: true },
+  { field: 'precio', header: 'Precio', type: 'number', currency: 'USD' },
+];
+const rows = ref([{ nombre: 'Widget', precio: 9.99 }]);
+const onRowClick = (detail: any) => console.log(detail.row);
+</script>
+```
+
+### Angular 17+
+
+```bash
+npm install @zentto/datagrid-angular
+```
+
+```typescript
+import { ZenttoDataGridComponent, ZENTTO_GRID_SCHEMA } from '@zentto/datagrid-angular';
+
+@Component({
+  standalone: true,
+  imports: [ZenttoDataGridComponent],
+  schemas: [ZENTTO_GRID_SCHEMA],
+  template: `
+    <zentto-data-grid
+      [columns]="columns"
+      [rows]="rows"
+      [showTotals]="true"
+      locale="es"
+      (rowClick)="onRowClick($event)">
+    </zentto-data-grid>
+  `
+})
+export class ProductosComponent { ... }
+```
+
+> `<zentto-grid>` es un web component estandar. Tambien funciona en **Svelte**, **Solid** y **.NET Blazor** sin wrapper.
 
 ---
 
@@ -770,6 +870,10 @@ Todas las propiedades se pueden establecer como atributos HTML (kebab-case) o pr
 | -- | `columnGroups` | `ColumnGroup[]` | `[]` | Grupos de cabecera |
 | `export-filename` | `exportFilename` | `string` | `'export'` | Nombre de archivo |
 | `page-size-options` | `pageSizeOptions` | `number[]` | `[10,25,50,100]` | Opciones de paginacion |
+| `enable-virtual-scroll` | `enableVirtualScroll` | `boolean` | `false` | Virtual scroll (100K+ filas) |
+| `enable-undo-redo` | `enableUndoRedo` | `boolean` | `false` | Deshacer/Rehacer (Ctrl+Z/Y) |
+| `enable-range-selection` | `enableRangeSelection` | `boolean` | `false` | Seleccion de rango tipo Excel |
+| `enable-paste` | `enablePaste` | `boolean` | `false` | Pegar desde Excel (Ctrl+V) |
 
 ---
 
@@ -797,6 +901,10 @@ Todas las propiedades se pueden establecer como atributos HTML (kebab-case) o pr
 | `column-resize` | `{ field, width }` | Columna redimensionada |
 | `import-complete` | `{ rows, count }` | Importacion completada |
 | `import-error` | `{ error }` | Error de importacion |
+| `undo` | `{ action }` | Accion deshecha |
+| `redo` | `{ action }` | Accion rehecha |
+| `paste` | `{ changes, rows, cols }` | Datos pegados desde clipboard |
+| `range-select` | `{ startRow, endRow, startCol, endCol }` | Rango de celdas seleccionado |
 
 ```js
 // Vanilla JS
@@ -818,6 +926,8 @@ document.querySelector('zentto-grid').addEventListener('row-click', (e) => {
 | `deleteSelected()` | Elimina las filas seleccionadas (con API si esta configurado) |
 | `saveNewRow(row)` | Guarda una fila nueva en la API |
 | `selectedRows` (getter) | Retorna array de filas seleccionadas |
+| `undo()` | Deshace la ultima edicion (requiere `enableUndoRedo`) |
+| `redo()` | Rehace la ultima accion deshecha |
 
 ```js
 const grid = document.querySelector('zentto-grid');
@@ -832,37 +942,51 @@ console.log(grid.selectedRows);
 
 | Paquete | Descripcion |
 |---|---|
-| `@zentto/datagrid-core` | Motor de logica pura -- ordenar, filtrar, agrupar, pivotear, formulas, exportar. Sin dependencias. |
+| `@zentto/datagrid-core` | Motor de logica pura -- ordenar, filtrar, agrupar, pivotear, formulas, virtual scroll, undo/redo, sparklines. Sin dependencias. |
 | `@zentto/datagrid` | Web component `<zentto-grid>` con Lit. Funciona en cualquier pagina HTML. |
 | `@zentto/datagrid-react` | Wrapper React con props tipadas y eventos. |
+| `@zentto/datagrid-vue` | Wrapper Vue 3 con props reactivas y eventos. |
+| `@zentto/datagrid-angular` | Wrapper Angular 17+ standalone + NgModule. |
 
 ```
-@zentto/datagrid-core          Funciones puras (sort, filter, group, pivot, formula, export)
+@zentto/datagrid-core          Funciones puras (sort, filter, group, pivot, formula, virtual scroll, undo/redo, sparklines)
         |
 @zentto/datagrid               Web component (<zentto-grid>) — Lit + Shadow DOM
         |
-@zentto/datagrid-react         Wrapper React — createComponent() de @lit/react
+   ┌────┼────┬────────┐
+   |    |    |        |
+ react  vue  angular  vanilla / svelte / blazor
 ```
 
 ---
 
 ## Hoja de Ruta
 
-- [x] ~~Edicion inline CRUD~~ **HECHO**
-- [x] ~~Menu de columna (3 puntitos)~~ **HECHO**
-- [x] ~~Drag & Drop~~ **HECHO**
-- [x] ~~Motor de formulas~~ **HECHO**
-- [x] ~~Importar CSV/JSON~~ **HECHO**
-- [x] ~~Multiseleccion checkbox~~ **HECHO**
-- [x] ~~Columna de acciones~~ **HECHO**
-- [ ] **Virtualizacion de filas** -- 100K+ filas sin lag
-- [ ] **Sparklines** -- mini graficos en celdas
-- [ ] **Deshacer/Rehacer** -- historial de ediciones
-- [ ] **Seleccion de rango tipo Excel**
-- [ ] **Pegar desde Excel** (clipboard paste)
-- [ ] **Wrapper Vue** -- `@zentto/datagrid-vue`
-- [ ] **Wrapper Angular** -- `@zentto/datagrid-angular`
-- [ ] **Accesibilidad** -- ARIA, teclado, lectores de pantalla
+### v0.1 (completado)
+- [x] Edicion inline CRUD
+- [x] Menu de columna (3 puntitos)
+- [x] Drag & Drop
+- [x] Motor de formulas
+- [x] Importar CSV/JSON/Excel
+- [x] Multiseleccion checkbox
+- [x] Columna de acciones
+
+### v0.2 (completado)
+- [x] Virtualizacion de filas (100K+ sin lag)
+- [x] Sparklines (mini graficos line/bar/area)
+- [x] Deshacer/Rehacer (Ctrl+Z/Y)
+- [x] Seleccion de rango tipo Excel
+- [x] Pegar desde Excel (Ctrl+V)
+- [x] Wrapper Vue 3 -- `@zentto/datagrid-vue`
+- [x] Wrapper Angular 17+ -- `@zentto/datagrid-angular`
+- [x] Accesibilidad ARIA + teclado + lectores de pantalla
+
+### Proximo
+- [ ] Server-side virtual scroll con scroll infinito
+- [ ] Exportar a PDF
+- [ ] Temas personalizados (JSON theme builder)
+- [ ] Column auto-size (doble clic en resize handle)
+- [ ] Frozen rows (filas fijas arriba/abajo)
 
 ---
 

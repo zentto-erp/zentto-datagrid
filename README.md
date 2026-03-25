@@ -1139,18 +1139,22 @@ This is a monorepo managed with [Turborepo](https://turbo.build/):
 
 | Package | npm | Description |
 |---|---|---|
-| [`@zentto/datagrid-core`](./packages/core) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-core.svg)](https://www.npmjs.com/package/@zentto/datagrid-core) | Pure logic engine -- sort, filter, group, pivot, aggregate, export. **Zero UI dependencies.** Use this to build your own grid UI or run server-side. |
+| [`@zentto/datagrid-core`](./packages/core) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-core.svg)](https://www.npmjs.com/package/@zentto/datagrid-core) | Pure logic engine -- sort, filter, group, pivot, virtual scroll, undo/redo, sparklines. **Zero UI dependencies.** |
 | [`@zentto/datagrid`](./packages/web-component) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid.svg)](https://www.npmjs.com/package/@zentto/datagrid) | `<zentto-grid>` web component built with [Lit](https://lit.dev/). Drop-in for any HTML page. |
 | [`@zentto/datagrid-react`](./packages/react) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-react.svg)](https://www.npmjs.com/package/@zentto/datagrid-react) | React wrapper via `@lit/react`. Provides `<ZenttoDataGrid>` with typed props and event handlers. |
+| [`@zentto/datagrid-vue`](./packages/vue) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-vue.svg)](https://www.npmjs.com/package/@zentto/datagrid-vue) | Vue 3 wrapper with reactive props, events, and exposed methods. |
+| [`@zentto/datagrid-angular`](./packages/angular) | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-angular.svg)](https://www.npmjs.com/package/@zentto/datagrid-angular) | Angular 17+ wrapper -- standalone component + NgModule. |
 
 ### Architecture
 
 ```
-@zentto/datagrid-core          Pure functions (sort, filter, group, pivot, export)
+@zentto/datagrid-core          Pure functions (sort, filter, group, pivot, virtual scroll, undo/redo, sparklines)
         |
-@zentto/datagrid               Web component (<zentto-grid>) — uses Lit for rendering
+@zentto/datagrid               Web component (<zentto-grid>) — Lit + Shadow DOM
         |
-@zentto/datagrid-react         React wrapper — createComponent() from @lit/react
+   ┌────┼────┬────────┐
+   |    |    |        |
+ react  vue  angular  vanilla / svelte / blazor
 ```
 
 The core package has **zero dependencies** and can be used standalone for headless data processing, testing, or server-side rendering.
@@ -1222,25 +1226,34 @@ zentto-datagrid/
 
 ## Roadmap
 
-- [x] ~~**Cell editing** -- inline edit with validation and commit/cancel~~ **DONE**
-- [x] ~~**Column menu** -- dropdown per column (hide, pin, group by)~~ **DONE**
-- [x] ~~**Drag-and-drop rows** -- reorder rows by dragging~~ **DONE**
-- [x] ~~**Formula engine** -- Excel-like formulas~~ **DONE**
-- [x] ~~**CRUD integration** -- auto REST API~~ **DONE**
-- [x] ~~**File import** -- CSV/JSON~~ **DONE**
-- [x] ~~**Row selection** -- checkbox multi-select~~ **DONE**
-- [x] ~~**Action buttons column**~~ **DONE**
-- [ ] **Row virtualization** -- render only visible rows for 100K+ datasets
-- [ ] **Sparkline columns** -- inline charts (line, bar, area)
-- [ ] **Undo/Redo** -- history stack for edits
-- [ ] **Tree data** -- hierarchical rows with expand/collapse
-- [ ] **Cell range selection** -- select range like Excel
-- [ ] **Clipboard paste** -- paste from Excel
-- [ ] **Vue wrapper** -- `@zentto/datagrid-vue`
-- [ ] **Angular wrapper** -- `@zentto/datagrid-angular`
-- [ ] **Server-side operations** -- adapters for REST/GraphQL backends
-- [ ] **Accessibility** -- ARIA roles, keyboard navigation, screen reader support
-- [ ] **Print mode** -- optimized print stylesheet
+### v0.1 (completed)
+- [x] Cell editing -- inline edit with validation and commit/cancel
+- [x] Column menu -- dropdown per column (hide, pin, group by)
+- [x] Drag-and-drop rows -- reorder rows by dragging
+- [x] Formula engine -- Excel-like formulas
+- [x] CRUD integration -- auto REST API
+- [x] File import -- CSV/JSON/Excel
+- [x] Row selection -- checkbox multi-select
+- [x] Action buttons column
+
+### v0.2 (completed)
+- [x] Row virtualization -- 100K+ rows without lag
+- [x] Sparkline columns -- inline charts (line, bar, area)
+- [x] Undo/Redo -- history stack with Ctrl+Z/Y
+- [x] Cell range selection -- select range like Excel
+- [x] Clipboard paste -- paste from Excel/Google Sheets
+- [x] Vue wrapper -- `@zentto/datagrid-vue`
+- [x] Angular wrapper -- `@zentto/datagrid-angular`
+- [x] Accessibility -- ARIA roles, keyboard navigation, screen reader support
+
+### Next
+- [ ] Server-side virtual scroll with infinite scrolling
+- [ ] Tree data -- hierarchical rows with expand/collapse
+- [ ] Export to PDF
+- [ ] Custom theme builder (JSON themes)
+- [ ] Column auto-size (double-click resize handle)
+- [ ] Frozen rows (pinned top/bottom)
+- [ ] Print mode -- optimized print stylesheet
 
 ---
 

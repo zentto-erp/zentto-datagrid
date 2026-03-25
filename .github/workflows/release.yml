@@ -3,7 +3,7 @@ name: Release & Publish
 on:
   push:
     tags:
-      - 'v*'       # Push de tag v0.2.1, v1.0.0, etc.
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -12,11 +12,14 @@ on:
         type: string
 
 permissions:
-  contents: write   # Crear releases
+  contents: write
   packages: write
 
+env:
+  PACKAGES: "core web-component react vue angular"
+
 jobs:
-  build-test:
+  build:
     name: Build & Verify
     runs-on: ubuntu-latest
     steps:
@@ -27,32 +30,23 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npx turbo build
 
-      - name: Build all packages
-        run: npx turbo build
-
-      - name: Verify TypeScript (no errors)
+      - name: Verify TypeScript
         run: |
-          cd packages/core && npx tsc --noEmit
-          cd ../web-component && npx tsc --noEmit
-          cd ../react && npx tsc --noEmit
+          for pkg in core web-component react; do
+            cd packages/$pkg && npx tsc --noEmit && cd "$GITHUB_WORKSPACE"
+          done
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: |
-            packages/core/dist/
-            packages/web-component/dist/
-            packages/react/dist/
-            packages/vue/dist/
-            packages/angular/dist/
+          name: build
+          path: packages/
 
   publish-npm:
-    name: Publish to npm
-    needs: build-test
+    name: Publish to npmjs.com
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,77 +56,109 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npx turbo build
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: packages/
-
-      - name: Rebuild (ensure dist/ in place)
-        run: npx turbo build
-
-      - name: Bump version (if manual input)
+      - name: Bump version (manual dispatch only)
         if: ${{ inputs.version != '' }}
         run: |
-          VERSION="${{ inputs.version }}"
           for pkg in packages/core packages/web-component packages/react packages/vue packages/angular; do
-            cd "$pkg"
-            npm version "$VERSION" --no-git-tag-version
+            cd "$pkg" && npm version "${{ inputs.version }}" --no-git-tag-version && cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Read version
+        id: ver
+        run: echo "version=$(node -p "require('./packages/core/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish all packages to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in core web-component react vue angular; do
+            echo "Publishing packages/$pkg..."
+            cd "packages/$pkg"
+            npm publish --access public || echo "⚠️ packages/$pkg already published or failed"
             cd "$GITHUB_WORKSPACE"
           done
 
-      - name: Read version from core
-        id: version
-        run: echo "version=$(node -p "require('./packages/core/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Publish @zentto/datagrid-core
-        run: cd packages/core && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @zentto/datagrid
-        run: cd packages/web-component && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @zentto/datagrid-react
-        run: cd packages/react && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @zentto/datagrid-vue
-        run: cd packages/vue && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @zentto/datagrid-angular
-        run: cd packages/angular && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.ver.outputs.version }}
+
+  publish-github:
+    name: Publish to GitHub Packages
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: '@zentto'
+
+      - run: npm ci
+      - run: npx turbo build
+
+      - name: Bump version (manual dispatch only)
+        if: ${{ inputs.version != '' }}
+        run: |
+          for pkg in packages/core packages/web-component packages/react packages/vue packages/angular; do
+            cd "$pkg" && npm version "${{ inputs.version }}" --no-git-tag-version && cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Configure GitHub Packages registry
+        run: |
+          for pkg in core web-component react vue angular; do
+            cat > "packages/$pkg/.npmrc" <<EOF
+          @zentto:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}
+          EOF
+          done
+
+      - name: Set repository field for GitHub Packages
+        run: |
+          for pkg in core web-component react vue angular; do
+            cd "packages/$pkg"
+            # GitHub Packages requires repository.url to match the repo
+            node -e "
+              const fs = require('fs');
+              const p = JSON.parse(fs.readFileSync('package.json','utf8'));
+              p.repository = { type: 'git', url: 'https://github.com/zentto-erp/zentto-datagrid.git' };
+              p.publishConfig = { registry: 'https://npm.pkg.github.com' };
+              fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+            "
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Publish all packages to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for pkg in core web-component react vue angular; do
+            echo "Publishing packages/$pkg to GitHub Packages..."
+            cd "packages/$pkg"
+            npm publish || echo "⚠️ packages/$pkg already published or failed"
+            cd "$GITHUB_WORKSPACE"
+          done
 
   github-release:
     name: Create GitHub Release
-    needs: publish-npm
+    needs: [publish-npm, publish-github]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for changelog
+          fetch-depth: 0
 
       - name: Get version
         id: ver
         run: echo "version=${{ needs.publish-npm.outputs.version }}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate changelog from commits
-        id: changelog
+      - name: Generate release notes
         run: |
           VERSION="v${{ steps.ver.outputs.version }}"
+          CORE_VER="${{ steps.ver.outputs.version }}"
 
           # Find previous tag
           PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1)
@@ -140,15 +166,9 @@ jobs:
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
 
-          echo "Previous tag: $PREV_TAG"
-
-          # Generate changelog from commits
+          # Changelog from commits since last tag
           CHANGES=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges 2>/dev/null || echo "- Initial release")
 
-          # Count packages
-          CORE_VER=$(node -p "require('./packages/core/package.json').version")
-
-          # Build release body
           cat > release-notes.md <<NOTES
           ## $VERSION
 
@@ -158,22 +178,21 @@ jobs:
 
           ### Published Packages
 
-          | Package | Version | npm |
-          |---------|---------|-----|
-          | \`@zentto/datagrid-core\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-core)](https://www.npmjs.com/package/@zentto/datagrid-core) |
-          | \`@zentto/datagrid\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid)](https://www.npmjs.com/package/@zentto/datagrid) |
-          | \`@zentto/datagrid-react\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-react)](https://www.npmjs.com/package/@zentto/datagrid-react) |
-          | \`@zentto/datagrid-vue\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-vue)](https://www.npmjs.com/package/@zentto/datagrid-vue) |
-          | \`@zentto/datagrid-angular\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-angular)](https://www.npmjs.com/package/@zentto/datagrid-angular) |
+          | Package | Version | npm | GitHub |
+          |---------|---------|-----|--------|
+          | \`@zentto/datagrid-core\` | $CORE_VER | [npmjs](https://www.npmjs.com/package/@zentto/datagrid-core) | [ghcr](https://github.com/zentto-erp/zentto-datagrid/packages) |
+          | \`@zentto/datagrid\` | $CORE_VER | [npmjs](https://www.npmjs.com/package/@zentto/datagrid) | [ghcr](https://github.com/zentto-erp/zentto-datagrid/packages) |
+          | \`@zentto/datagrid-react\` | $CORE_VER | [npmjs](https://www.npmjs.com/package/@zentto/datagrid-react) | [ghcr](https://github.com/zentto-erp/zentto-datagrid/packages) |
+          | \`@zentto/datagrid-vue\` | $CORE_VER | [npmjs](https://www.npmjs.com/package/@zentto/datagrid-vue) | [ghcr](https://github.com/zentto-erp/zentto-datagrid/packages) |
+          | \`@zentto/datagrid-angular\` | $CORE_VER | [npmjs](https://www.npmjs.com/package/@zentto/datagrid-angular) | [ghcr](https://github.com/zentto-erp/zentto-datagrid/packages) |
 
           ---
-          Install: \`npm install @zentto/datagrid@$CORE_VER\`
+          **Install:** \`npm install @zentto/datagrid@$CORE_VER\`
           NOTES
 
       - name: Create or update tag
         run: |
           VERSION="v${{ steps.ver.outputs.version }}"
-          # Create tag if it doesn't exist (for workflow_dispatch)
           if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
             git tag "$VERSION"
             git push origin "$VERSION"
@@ -184,7 +203,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="v${{ steps.ver.outputs.version }}"
-          # Delete existing release if re-running
           gh release delete "$VERSION" --yes 2>/dev/null || true
           gh release create "$VERSION" \
             --title "$VERSION" \

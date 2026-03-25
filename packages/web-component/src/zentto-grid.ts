@@ -72,7 +72,8 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Array }) columns: ColumnDef[] = [];
   @property({ type: Array }) rows: GridRow[] = [];
   @property({ type: String }) theme: 'light' | 'dark' | 'zentto' = 'light';
-  @property({ type: String }) locale: 'es' | 'en' = 'es';
+  /** BCP 47 locale tag: 'es', 'en', 'pt', 'fr', 'de', 'es-VE', 'en-GB', etc. */
+  @property({ type: String }) locale = 'es';
   @property({ type: Boolean, attribute: 'show-totals' }) showTotals = false;
   @property({ type: String, attribute: 'totals-label' }) totalsLabel = 'Totales';
   @property({ type: Boolean, attribute: 'enable-clipboard' }) enableClipboard = false;
@@ -88,7 +89,7 @@ export class ZenttoGrid extends LitElement {
   @property({ type: String, attribute: 'grid-id' }) gridId = '';
   @property({ type: Array, attribute: 'page-size-options' }) pageSizeOptions = [10, 25, 50, 100];
   @property({ type: Boolean }) loading = false;
-  @property({ type: String }) density: 'compact' | 'standard' | 'comfortable' = 'standard';
+  @property({ type: String }) density: 'compact' | 'standard' | 'comfortable' = 'compact';
   @property({ type: String }) height = '500px';
 
   // ─── Toolbar ─────────────────────────────────────────────────
@@ -303,8 +304,10 @@ export class ZenttoGrid extends LitElement {
   @state() private _datePickerMonth = new Date();
 
   // ─── i18n helper ────────────────────────────────────────────
+  /** i18n helper — uses locale prefix to pick translation. Falls back to English. */
   private _t(es: string, en: string): string {
-    return this.locale === 'es' ? es : en;
+    const lang = this.locale.split('-')[0]; // 'es-VE' → 'es'
+    return lang === 'es' ? es : lang === 'pt' ? es : en; // PT uses ES as fallback (similar)
   }
 
   // ─── Computed data ────────────────────────────────────────────
@@ -1767,13 +1770,13 @@ export class ZenttoGrid extends LitElement {
       const num = Number(val);
       // In totals row: just number with 2 decimals, no currency symbol
       if (isTotals) {
-        return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
+        return new Intl.NumberFormat(this.locale, {
           minimumFractionDigits: 2, maximumFractionDigits: 2,
         }).format(num);
       }
       const code = typeof col.currency === 'string' ? col.currency : this.defaultCurrency;
       try {
-        return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
+        return new Intl.NumberFormat(this.locale, {
           style: 'currency', currency: code, minimumFractionDigits: 2,
         }).format(num);
       } catch { return String(val); }
@@ -1782,7 +1785,7 @@ export class ZenttoGrid extends LitElement {
     if (col.type === 'number') {
       const num = Number(val);
       const hasDecimals = num % 1 !== 0;
-      return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
+      return new Intl.NumberFormat(this.locale, {
         minimumFractionDigits: hasDecimals ? 2 : 0,
         maximumFractionDigits: 2,
       }).format(num);
@@ -1792,7 +1795,10 @@ export class ZenttoGrid extends LitElement {
       try {
         const d = new Date(String(val));
         if (isNaN(d.getTime())) return String(val);
-        return d.toLocaleDateString(this.locale === 'es' ? 'es-VE' : 'en-US');
+        if (col.type === 'datetime') {
+          return d.toLocaleString(this.locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        return d.toLocaleDateString(this.locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
       } catch { return String(val); }
     }
 
@@ -1876,6 +1882,48 @@ export class ZenttoGrid extends LitElement {
     this.setAttribute('aria-label', this._t('Tabla de datos', 'Data grid'));
     // Restore layout from IndexedDB
     this._restoreLayout();
+    // Auto-detect dark mode if theme not explicitly set
+    this._autoDetectTheme();
+    // Watch for theme changes on parent/body
+    this._themeObserver = new MutationObserver(() => this._autoDetectTheme());
+    this._themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme', 'style'] });
+    this._themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme', 'style'] });
+    // Also listen to system preference changes
+    this._darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this._darkMediaQuery.addEventListener('change', this._handleMediaChange);
+  }
+
+  private _themeObserver?: MutationObserver;
+  private _darkMediaQuery?: MediaQueryList;
+  private _themeSetExplicitly = false;
+
+  private _handleMediaChange = () => this._autoDetectTheme();
+
+  private _autoDetectTheme() {
+    // Don't override if user set theme via configurator or prop
+    if (this._themeSetExplicitly) return;
+    // Check if theme attribute was explicitly set in HTML
+    if (this.getAttribute('theme')) { this._themeSetExplicitly = true; return; }
+
+    const isDark =
+      document.documentElement.classList.contains('dark') ||
+      document.documentElement.getAttribute('data-theme') === 'dark' ||
+      document.documentElement.getAttribute('data-color-scheme') === 'dark' ||
+      document.body.classList.contains('dark') ||
+      document.body.getAttribute('data-theme') === 'dark' ||
+      document.documentElement.style.colorScheme === 'dark' ||
+      window.matchMedia('(prefers-color-scheme: dark)').matches ||
+      // MUI dark mode detection: check body background
+      (typeof getComputedStyle !== 'undefined' && (() => {
+        const bg = getComputedStyle(document.body).backgroundColor;
+        if (!bg || bg === 'rgba(0, 0, 0, 0)') return false;
+        const match = bg.match(/\d+/g);
+        if (!match) return false;
+        const [r, g, b] = match.map(Number);
+        return (r + g + b) / 3 < 100; // Dark if average RGB < 100
+      })());
+
+    this.theme = isDark ? 'dark' : 'light';
   }
 
   private async _restoreLayout() {
@@ -1915,6 +1963,8 @@ export class ZenttoGrid extends LitElement {
     this.removeEventListener('mouseup', this._handleGlobalMouseUp);
     document.removeEventListener('click', this._handleDocClick);
     window.removeEventListener('resize', this._handleResize);
+    this._themeObserver?.disconnect();
+    this._darkMediaQuery?.removeEventListener('change', this._handleMediaChange);
   }
 
   private _handlePasteEvent = (e: Event) => this._handlePaste(e as ClipboardEvent);
@@ -2169,7 +2219,7 @@ export class ZenttoGrid extends LitElement {
                   </th>
                 `})}
                 ${hasActions ? html`
-                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;z-index:3;background:var(--zg-header-bg, #f8f9fa)">
+                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;top:0;z-index:5;background:var(--zg-header-bg)">
                     ${this._t('Acciones', 'Actions')}
                   </th>
                 ` : nothing}
@@ -2290,7 +2340,7 @@ export class ZenttoGrid extends LitElement {
                       `;
                     })}
                     ${hasActions && !isTotals ? html`
-                      <td class="zg-td zg-td-right zg-td-actions" style="position:sticky;right:0;z-index:1;background:var(--zg-bg, #fff);white-space:nowrap">
+                      <td class="zg-td zg-td-right zg-td-actions" style="position:sticky;right:0;z-index:3;background:var(--zg-row-bg, var(--zg-bg));white-space:nowrap">
                         ${this.actionButtons.map(btn => html`
                           <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
                                   title="${btn.label}"
@@ -2538,6 +2588,10 @@ export class ZenttoGrid extends LitElement {
       ${this._renderConfigSwitch(this._t('Edicion en linea', 'Inline editing'), this.enableEditing, v => { this.enableEditing = v; }, this._t('Click en celda para editar (tipo Excel)', 'Click cell to edit (Excel-like)'))}
       ${this._renderConfigSwitch(this._t('Menu de columna', 'Column menu'), this.enableHeaderMenu, v => { this.enableHeaderMenu = v; }, this._t('Menu de 3 puntos en headers', 'Three-dot menu on headers'))}
       ${this._renderConfigSwitch(this._t('Arrastrar filas', 'Drag & drop'), this.enableDragDrop, v => { this.enableDragDrop = v; }, this._t('Reordenar filas arrastrando', 'Reorder rows by dragging'))}
+      ${this._renderConfigSwitch(this._t('Seleccion de rango', 'Range selection'), this.enableRangeSelection, v => { this.enableRangeSelection = v; }, this._t('Seleccionar celdas arrastrando como Excel', 'Select cells by dragging like Excel'))}
+      ${this._renderConfigSwitch(this._t('Pegar desde Excel', 'Paste from Excel'), this.enablePaste, v => { this.enablePaste = v; }, this._t('Ctrl+V para pegar datos desde Excel/Sheets', 'Ctrl+V to paste data from Excel/Sheets'))}
+      ${this._renderConfigSwitch(this._t('Deshacer/Rehacer', 'Undo/Redo'), this.enableUndoRedo, v => { this.enableUndoRedo = v; }, this._t('Ctrl+Z / Ctrl+Y para deshacer y rehacer', 'Ctrl+Z / Ctrl+Y to undo and redo'))}
+      ${this._renderConfigSwitch(this._t('Virtual Scroll', 'Virtual Scroll'), this.enableVirtualScroll, v => { this.enableVirtualScroll = v; }, this._t('Rendimiento para 100K+ filas', 'Performance for 100K+ rows'))}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">v0.2</div>
