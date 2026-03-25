@@ -164,6 +164,68 @@ export interface GridEvents {
   'column-resize': { field: string; width: number };
   'column-reorder': { fields: string[] };
   'row-expand': { row: GridRow; expanded: boolean };
+  'drag-start': { rows: GridRow[]; group?: string };
+  'drag-drop': { rows: GridRow[]; sourceGroup?: string; targetGroup?: string };
+}
+
+/** Filter panel field definition — declared from React, rendered inside the grid toolbar */
+export interface FilterPanelField {
+  /** Field name in the row data */
+  field: string;
+  /** Display label */
+  label: string;
+  /** Filter type: select (dropdown), multi-select, range slider, text search, date range */
+  type: 'select' | 'multi-select' | 'range' | 'text' | 'date-range';
+  /** Fixed options (if omitted, auto-generated from data) */
+  options?: { value: string; label: string }[];
+  /** Default selected value(s) */
+  defaultValue?: unknown;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Width in px (for toolbar inline mode) */
+  width?: number;
+}
+
+/** Header context menu action (emitted as event) */
+export interface HeaderMenuAction {
+  field: string;
+  action: 'sort-asc' | 'sort-desc' | 'clear-sort' | 'hide-column' | 'pin-left' | 'pin-right' | 'unpin' | 'copy-column' | 'auto-size';
+}
+
+/** Action button definition for the actions column */
+export interface ActionButtonDef {
+  icon: string;
+  label: string;
+  action: string;
+  color?: string;
+}
+
+/** CRUD API configuration for inline editing */
+export interface CrudConfig {
+  /** Base URL for CRUD operations (e.g., '/api/v1/articulos') */
+  baseUrl: string;
+  /** Primary key field name (default: 'id') */
+  idField?: string;
+  /** Additional headers for API calls */
+  headers?: Record<string, string>;
+  /** HTTP method overrides */
+  methods?: {
+    create?: string;  // default POST
+    update?: string;  // default PUT
+    delete?: string;  // default DELETE
+  };
+  /** Editable column fields (if omitted, all columns are editable) */
+  editableFields?: string[];
+  /** Custom transform before sending to API */
+  transformPayload?: (row: GridRow, action: 'create' | 'update') => unknown;
+}
+
+/** Formula cell definition */
+export interface FormulaDefinition {
+  /** Target field where formula result goes */
+  field: string;
+  /** Formula expression: =SUM(price), =A*B, ={field1}*{field2}, =ROUND({total}/1.16, 2) */
+  formula: string;
 }
 
 /** Full grid options (props for the web component) */
@@ -179,6 +241,10 @@ export interface GridOptions {
   filters?: FilterRule[];
   enableHeaderFilters?: boolean;
   enableFind?: boolean;
+  filterPanel?: FilterPanelField[];
+
+  // ─── Column Visibility ─────────────────
+  hiddenColumns?: string[];
 
   // ─── Pagination ───────────────────────
   pagination?: PaginationModel;
@@ -198,7 +264,12 @@ export interface GridOptions {
 
   // ─── Selection ────────────────────────
   enableRowSelection?: boolean;
+  enableMultiSelect?: boolean;
   enableCellSelection?: boolean;
+
+  // ─── Drag & Drop ───────────────────────
+  enableDragDrop?: boolean;
+  dragDropGroup?: string;
 
   // ─── Column Features ──────────────────
   columnGroups?: ColumnGroup[];

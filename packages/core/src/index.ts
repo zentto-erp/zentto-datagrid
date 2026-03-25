@@ -18,6 +18,11 @@ export type {
   ContextMenuItem,
   GridEvents,
   GridOptions,
+  FilterPanelField,
+  HeaderMenuAction,
+  ActionButtonDef,
+  CrudConfig,
+  FormulaDefinition,
 } from './types';
 
 // Data operations
@@ -43,6 +48,9 @@ export type { FindMatch } from './search/find';
 
 // Selection & Clipboard
 export { copyToClipboard, copyCellValue } from './selection/clipboard';
+
+// Formulas
+export { evaluateFormula, applyFormulas } from './data/formula';
 
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';

@@ -25,7 +25,8 @@
   <a href="#usage-examples">Examples</a> |
   <a href="#column-definition-api">Column API</a> |
   <a href="#grid-properties-api">Grid API</a> |
-  <a href="#events">Events</a>
+  <a href="#events">Events</a> |
+  <a href="docs/custom-styles.md">Custom Styles Guide</a>
 </p>
 
 ---
@@ -133,6 +134,70 @@ Most enterprise data grids charge hundreds or thousands of dollars per developer
 - Save/restore column widths, sort order, and filters
 - `gridId` for multi-grid pages
 - LocalStorage-based persistence
+
+### Rich Toolbar (NEW)
+- Integrated column chooser (show/hide columns)
+- Density picker (compact/standard/comfortable)
+- Export dropdown (CSV, Excel, JSON, Markdown)
+- Filter panel toggle with active count badge
+- Clipboard and Find buttons
+- Selection count indicator
+
+### Declarative Filter Panel (NEW)
+- Define filters from React/Vue/Angular as props
+- Auto-generates select options from data
+- Types: `select`, `multi-select`, `range`, `text`, `date-range`
+- Active filter count badge + "Clear all" button
+
+### Header Column Menu (NEW)
+- Three-dot menu on each column header (toggleable via `enable-header-menu`)
+- Sort ascending/descending
+- Filter (activates header filter for that column)
+- Hide column
+- Manage columns (opens column chooser panel)
+
+### Cell Context Menu (Enhanced)
+- Copy cell value
+- Copy row
+- Pin column left/right
+- Unpin column
+- Filter by this value
+- Export visible data
+
+### Row Selection (NEW)
+- Checkbox multi-select with "Select All" in header
+- Shift+Click for range selection
+- Selection count in toolbar
+- `selection-change` event with selected rows
+- `selectedRows` public getter
+
+### Drag & Drop (NEW)
+- Drag handle per row
+- Drag selected rows between grids
+- `drag-drop-group` for multi-grid scenarios
+- `drag-start` and `drag-drop` events
+
+### Action Buttons Column (NEW)
+- Configurable buttons via `actionButtons` prop
+- Icons, labels, colors per button
+- Fixed/sticky to the right edge
+- `action-click` event with action name and row
+
+### Inline Editing & CRUD (NEW)
+- Double-click to edit any cell
+- Enter to commit, Escape to cancel, Tab to next cell
+- `crudConfig` with API endpoint for automatic CRUD
+- Auto-rollback on API error
+- `addRow()` and `deleteSelected()` public methods
+- Create/Update/Delete against REST API
+- Import from CSV/JSON files
+
+### Formula Engine (NEW)
+- Excel-like formulas: `=SUM({field})`, `=AVG({field})`, `=MIN/MAX/COUNT`
+- Per-row arithmetic: `={price} * {quantity}`
+- `=ROUND({total}/1.16, 2)`
+- `=IF({stock} > 100, "High", "Low")`
+- Formulas defined declaratively as props
 
 ---
 
@@ -424,9 +489,383 @@ Groups are collapsible. Subtotals use the `aggregation` defined on each column.
 ></zentto-grid>
 ```
 
-Right-click any cell to access: **Copy Cell**, **Copy Row**, **Export CSV**.
+Right-click any cell to access: **Copy Cell**, **Copy Row**, **Pin Column**, **Filter by Value**, **Export Visible**.
 
 Press `Ctrl+F` to open the in-grid search bar. Navigate matches with `Enter`. Press `Escape` to close.
+
+### Rich Toolbar with Column Chooser
+
+```html
+<zentto-grid
+  .columns=${columns}
+  .rows=${rows}
+  enable-toolbar
+  enable-header-menu
+  enable-find
+  enable-clipboard
+  enable-status-bar
+  locale="es"
+></zentto-grid>
+```
+
+The toolbar includes: row count, filter toggle, clipboard, find, column chooser, density picker, and export dropdown -- all integrated inside the grid.
+
+### Declarative Filter Panel (auto-generated from data)
+
+```tsx
+// React — filters are declared as props, options auto-generated
+const gridRef = useRef(null);
+
+useEffect(() => {
+  const el = gridRef.current;
+  el.filterPanel = [
+    { field: 'categoria', type: 'select', label: 'Category' },
+    { field: 'marca', type: 'select', label: 'Brand' },
+    { field: 'precio', type: 'range', label: 'Price' },
+    { field: 'fecha', type: 'date-range', label: 'Date' },
+    { field: 'nombre', type: 'text', label: 'Search', placeholder: 'Product name...' },
+  ];
+  el.enableFilterPanel = true;
+}, []);
+
+<zentto-grid ref={gridRef} />
+```
+
+```html
+<!-- Vanilla JS -->
+<zentto-grid id="grid" enable-filter-panel></zentto-grid>
+<script>
+  document.getElementById('grid').filterPanel = [
+    { field: 'status', type: 'select', label: 'Status' },
+    { field: 'amount', type: 'range', label: 'Amount' },
+  ];
+</script>
+```
+
+### Header Column Menu (three dots)
+
+```html
+<zentto-grid
+  .columns=${columns}
+  .rows=${rows}
+  enable-header-menu
+></zentto-grid>
+```
+
+Hover over any column header to see the three-dot menu. Options: Sort Asc/Desc, Filter, Hide Column, Manage Columns. Disable with `enable-header-menu="false"`.
+
+### Row Selection with Checkbox
+
+```html
+<zentto-grid
+  .columns=${columns}
+  .rows=${rows}
+  enable-row-selection
+></zentto-grid>
+```
+
+```js
+// Access selected rows
+const grid = document.querySelector('zentto-grid');
+grid.addEventListener('selection-change', (e) => {
+  console.log('Selected:', e.detail.selectedRows);
+  console.log('Count:', e.detail.count);
+});
+
+// Or read directly
+const selected = grid.selectedRows;
+```
+
+Supports Shift+Click for range selection.
+
+### Action Buttons (pinned right)
+
+```tsx
+// React
+useEffect(() => {
+  gridRef.current.actionButtons = [
+    { icon: '👁', label: 'View', action: 'view' },
+    { icon: '✏️', label: 'Edit', action: 'edit', color: '#f59e0b' },
+    { icon: '🗑️', label: 'Delete', action: 'delete', color: '#dc2626' },
+  ];
+}, []);
+
+// Listen for actions
+gridRef.current.addEventListener('action-click', (e) => {
+  const { action, row } = e.detail;
+  if (action === 'view') openModal(row);
+  if (action === 'edit') navigate(`/edit/${row.id}`);
+  if (action === 'delete') confirmDelete(row.id);
+});
+```
+
+```html
+<!-- Vanilla JS -->
+<zentto-grid id="grid"></zentto-grid>
+<script>
+  const grid = document.getElementById('grid');
+  grid.actionButtons = [
+    { icon: '👁', label: 'Ver', action: 'view' },
+    { icon: '✏️', label: 'Editar', action: 'edit', color: '#f59e0b' },
+    { icon: '🗑️', label: 'Eliminar', action: 'delete', color: '#dc2626' },
+  ];
+  grid.addEventListener('action-click', (e) => {
+    alert(`Action: ${e.detail.action} on row ${e.detail.row.id}`);
+  });
+</script>
+```
+
+### Drag & Drop Between Grids
+
+```html
+<!-- Source grid -->
+<zentto-grid id="available"
+  .columns=${columns}
+  .rows=${availableItems}
+  enable-row-selection
+  enable-drag-drop
+  drag-drop-group="items"
+></zentto-grid>
+
+<!-- Target grid -->
+<zentto-grid id="selected"
+  .columns=${columns}
+  .rows=${selectedItems}
+  enable-row-selection
+  enable-drag-drop
+  drag-drop-group="items"
+></zentto-grid>
+
+<script>
+  document.getElementById('selected').addEventListener('drag-drop', (e) => {
+    const { rows, sourceGroup, targetGroup } = e.detail;
+    console.log(`Dropped ${rows.length} rows from ${sourceGroup} to ${targetGroup}`);
+    // Move rows from source to target
+  });
+</script>
+```
+
+### Inline Editing with CRUD API
+
+```tsx
+// React — Full CRUD against REST API
+useEffect(() => {
+  const el = gridRef.current;
+  el.enableEditing = true;
+  el.enableRowSelection = true;  // needed for delete
+  el.crudConfig = {
+    baseUrl: '/api/v1/productos',
+    idField: 'id',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-company-id': '1',
+    },
+    editableFields: ['nombre', 'precio', 'stock', 'categoria'],
+    methods: {
+      create: 'POST',
+      update: 'PUT',
+      delete: 'DELETE',
+    },
+  };
+
+  // Listen for CRUD events
+  el.addEventListener('crud-update', (e) => {
+    toast.success(`Updated ${e.detail.field}`);
+  });
+  el.addEventListener('crud-error', (e) => {
+    toast.error(`Error: ${e.detail.error.message}`);
+  });
+}, []);
+
+// Add new row programmatically
+<button onClick={() => gridRef.current.addRow({ categoria: 'Default' })}>
+  + Add Product
+</button>
+
+// Delete selected rows
+<button onClick={() => gridRef.current.deleteSelected()}>
+  Delete Selected
+</button>
+```
+
+```html
+<!-- Vanilla JS -->
+<zentto-grid id="grid" enable-editing enable-row-selection></zentto-grid>
+<script>
+  const grid = document.getElementById('grid');
+  grid.crudConfig = {
+    baseUrl: 'https://api.example.com/items',
+    idField: 'id',
+    headers: { 'Authorization': 'Bearer token123' },
+  };
+
+  // Double-click any cell to edit
+  // Press Enter to save, Escape to cancel
+  // Changes auto-sync to API
+
+  // Public methods
+  grid.addRow({ name: 'New Item', price: 0 });
+  grid.deleteSelected();
+</script>
+```
+
+### Import from CSV/JSON
+
+```html
+<zentto-grid id="grid"
+  enable-editing
+  .crudConfig=${{ baseUrl: '/api/v1/items', idField: 'id' }}
+></zentto-grid>
+```
+
+When editing is enabled, the CRUD bar shows an "Import" button. Click to upload a `.csv` or `.json` file. The grid:
+1. Parses the file
+2. Adds rows to the local data
+3. If `crudConfig` is set, POSTs each row to the API
+
+### Formula Engine (Excel-like)
+
+```tsx
+// React
+useEffect(() => {
+  gridRef.current.formulas = [
+    // Per-row: calculate subtotal
+    { field: 'subtotal', formula: '={price} * {quantity}' },
+    // Per-row: tax
+    { field: 'tax', formula: '=ROUND({subtotal} * 0.16, 2)' },
+    // Per-row: total
+    { field: 'total', formula: '={subtotal} + {tax}' },
+    // Conditional
+    { field: 'level', formula: '=IF({stock} > 100, "High", "Low")' },
+  ];
+}, []);
+```
+
+```html
+<!-- Vanilla JS -->
+<zentto-grid id="grid"></zentto-grid>
+<script>
+  const grid = document.getElementById('grid');
+  grid.formulas = [
+    { field: 'margin', formula: '={sellPrice} - {costPrice}' },
+    { field: 'marginPct', formula: '=ROUND({margin} / {sellPrice} * 100, 1)' },
+    { field: 'status', formula: '=IF({stock} > 0, "Available", "Out of stock")' },
+  ];
+</script>
+```
+
+**Supported functions:**
+- `SUM({field})` -- sum across all rows
+- `AVG({field})` -- average across all rows
+- `MIN({field})`, `MAX({field})`, `COUNT({field})`
+- `ROUND(expr, decimals)`
+- `IF(condition, trueValue, falseValue)`
+- Arithmetic: `+`, `-`, `*`, `/` with `{field}` references
+
+### Vue Example
+
+```html
+<template>
+  <zentto-grid
+    ref="grid"
+    locale="es"
+    enable-toolbar
+    enable-header-menu
+    enable-row-selection
+    enable-context-menu
+    height="600px"
+  />
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import '@zentto/datagrid';
+
+const grid = ref(null);
+
+onMounted(() => {
+  grid.value.columns = [
+    { field: 'name', header: 'Nombre', sortable: true },
+    { field: 'price', header: 'Precio', type: 'number', currency: 'USD' },
+  ];
+  grid.value.rows = [{ name: 'Widget', price: 9.99 }];
+  grid.value.actionButtons = [
+    { icon: '👁', label: 'Ver', action: 'view' },
+  ];
+  grid.value.addEventListener('action-click', (e) => {
+    console.log(e.detail);
+  });
+});
+</script>
+```
+
+### Angular Example
+
+```typescript
+// app.component.ts
+import '@zentto/datagrid';
+
+@Component({
+  template: `
+    <zentto-grid #grid
+      locale="en"
+      enable-toolbar
+      enable-row-selection
+      height="500px"
+    ></zentto-grid>
+  `,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+})
+export class AppComponent implements AfterViewInit {
+  @ViewChild('grid') grid!: ElementRef;
+
+  ngAfterViewInit() {
+    const el = this.grid.nativeElement;
+    el.columns = [
+      { field: 'name', header: 'Name', sortable: true },
+      { field: 'price', header: 'Price', type: 'number', currency: 'USD' },
+    ];
+    el.rows = this.data;
+    el.actionButtons = [
+      { icon: '✏️', label: 'Edit', action: 'edit' },
+    ];
+    el.addEventListener('action-click', (e: any) => {
+      this.onAction(e.detail);
+    });
+  }
+}
+```
+
+### .NET Blazor Example
+
+```razor
+@* Blazor WebAssembly / Server *@
+<zentto-grid @ref="grid" locale="es" enable-toolbar enable-editing height="600px" />
+
+@code {
+    private ElementReference grid;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("setupGrid", grid);
+        }
+    }
+}
+
+@* wwwroot/js/grid-setup.js *@
+<script>
+  window.setupGrid = (el) => {
+    el.columns = [
+      { field: 'name', header: 'Nombre', sortable: true },
+      { field: 'price', header: 'Precio', type: 'number', currency: 'VES' },
+    ];
+    el.rows = [...];
+    el.crudConfig = { baseUrl: '/api/items', idField: 'id' };
+  };
+</script>
+```
 
 ### Column Pinning
 
@@ -550,6 +989,17 @@ All properties can be set as HTML attributes (kebab-case) or JavaScript properti
 | `group-sort` | `groupSort` | `'asc' \| 'desc' \| ''` | `''` | Sort direction for groups |
 | -- | `pinnedColumns` | `{ left?: string[]; right?: string[] }` | `{}` | Pinned column configuration |
 | -- | `columnGroups` | `ColumnGroup[]` | `[]` | Multi-level header groups |
+| `enable-toolbar` | `enableToolbar` | `boolean` | `true` | Show rich toolbar |
+| `enable-header-menu` | `enableHeaderMenu` | `boolean` | `true` | Show three-dot menu on column headers |
+| `enable-filter-panel` | `enableFilterPanel` | `boolean` | `false` | Show filter panel below toolbar |
+| -- | `filterPanel` | `FilterPanelField[]` | `[]` | Declarative filter definitions |
+| `enable-row-selection` | `enableRowSelection` | `boolean` | `false` | Enable checkbox multi-select |
+| `enable-drag-drop` | `enableDragDrop` | `boolean` | `false` | Enable row drag & drop |
+| `drag-drop-group` | `dragDropGroup` | `string` | `''` | Group name for cross-grid drag |
+| -- | `actionButtons` | `ActionButtonDef[]` | `[]` | Action buttons column (pinned right) |
+| `enable-editing` | `enableEditing` | `boolean` | `false` | Enable inline cell editing |
+| -- | `crudConfig` | `CrudConfig` | -- | API config for auto CRUD |
+| -- | `formulas` | `FormulaDefinition[]` | `[]` | Excel-like formula definitions |
 | `export-filename` | `exportFilename` | `string` | `'export'` | Base filename for exports |
 | `page-size-options` | `pageSizeOptions` | `number[]` | `[10, 25, 50, 100]` | Page size dropdown options |
 
@@ -570,6 +1020,19 @@ All events are dispatched as `CustomEvent` with typed `detail`. Listen using `ad
 | `column-resize` | -- | `{ field: string, width: number }` | A column was resized |
 | `column-reorder` | -- | `{ fields: string[] }` | Columns were reordered |
 | `row-expand` | -- | `{ row: GridRow, expanded: boolean }` | A detail row was expanded/collapsed |
+| `action-click` | -- | `{ action: string, row: GridRow }` | An action button was clicked |
+| `header-menu-action` | -- | `{ field: string, action: string }` | Header menu action performed |
+| `column-visibility-change` | -- | `{ hiddenColumns: string[] }` | Column visibility changed |
+| `filter-panel-change` | -- | `{ field, value, allFilters }` | Filter panel value changed |
+| `drag-start` | -- | `{ rows: GridRow[], group: string }` | Row drag started |
+| `drag-drop` | -- | `{ rows, sourceGroup, targetGroup }` | Rows dropped on grid |
+| `cell-edit` | -- | `{ row, field, oldValue, newValue }` | Cell edited (no CRUD) |
+| `crud-update` | -- | `{ row, field, oldValue, newValue }` | CRUD update succeeded |
+| `crud-create` | -- | `{ row, success: boolean }` | CRUD create succeeded |
+| `crud-delete` | -- | `{ rows, count }` | CRUD delete succeeded |
+| `crud-error` | -- | `{ action, row, error }` | CRUD operation failed |
+| `import-complete` | -- | `{ rows, count }` | File import completed |
+| `import-error` | -- | `{ error \| message }` | File import failed |
 
 ```js
 // Vanilla JS
@@ -672,13 +1135,20 @@ zentto-datagrid/
 
 ## Roadmap
 
+- [x] ~~**Cell editing** -- inline edit with validation and commit/cancel~~ **DONE**
+- [x] ~~**Column menu** -- dropdown per column (hide, pin, group by)~~ **DONE**
+- [x] ~~**Drag-and-drop rows** -- reorder rows by dragging~~ **DONE**
+- [x] ~~**Formula engine** -- Excel-like formulas~~ **DONE**
+- [x] ~~**CRUD integration** -- auto REST API~~ **DONE**
+- [x] ~~**File import** -- CSV/JSON~~ **DONE**
+- [x] ~~**Row selection** -- checkbox multi-select~~ **DONE**
+- [x] ~~**Action buttons column**~~ **DONE**
 - [ ] **Row virtualization** -- render only visible rows for 100K+ datasets
-- [ ] **Cell editing** -- inline edit with validation and commit/cancel
 - [ ] **Sparkline columns** -- inline charts (line, bar, area)
 - [ ] **Undo/Redo** -- history stack for edits
 - [ ] **Tree data** -- hierarchical rows with expand/collapse
-- [ ] **Column menu** -- dropdown per column (hide, pin, group by)
-- [ ] **Drag-and-drop rows** -- reorder rows by dragging
+- [ ] **Cell range selection** -- select range like Excel
+- [ ] **Clipboard paste** -- paste from Excel
 - [ ] **Vue wrapper** -- `@zentto/datagrid-vue`
 - [ ] **Angular wrapper** -- `@zentto/datagrid-angular`
 - [ ] **Server-side operations** -- adapters for REST/GraphQL backends

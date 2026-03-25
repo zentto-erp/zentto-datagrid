@@ -28,6 +28,9 @@ export const ZenttoDataGrid = createComponent({
     onFilterChange: 'filter-change',
     onPageChange: 'page-change',
     onSelectionChange: 'selection-change',
+    onGroupChange: 'group-change',
+    onImportComplete: 'import-complete',
+    onImportError: 'import-error',
   } as any,
 });
 
