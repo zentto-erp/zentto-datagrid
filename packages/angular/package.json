@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-angular",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Angular wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",
