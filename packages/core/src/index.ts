@@ -34,6 +34,8 @@ export type { PaginationResult } from './data/paginate';
 // Export
 export { toCsv, downloadCsv } from './export/csv';
 export { toJson, downloadJson } from './export/json';
+export { toExcelHtml, downloadExcel } from './export/excel';
+export { toMarkdown, downloadMarkdown } from './export/markdown';
 
 // Search
 export { findInGrid } from './search/find';

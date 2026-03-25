@@ -299,4 +299,213 @@ export const gridStyles = css`
   }
 
   @keyframes zg-spin { to { transform: rotate(360deg); } }
+
+  /* ─── Master-Detail (Expandable Rows) ──────────────── */
+  .zg-th-expand, .zg-td-expand {
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px !important;
+  }
+
+  .zg-expand-chevron {
+    display: inline-block;
+    font-size: 0.65rem;
+    color: #888;
+    transition: transform 0.2s ease;
+  }
+  .zg-expand-chevron--expanded { transform: rotate(90deg); }
+
+  .zg-row-detail td { padding: 0 !important; }
+  .zg-td-detail { background: #f9fafb; border-bottom: 2px solid var(--zg-border-color, #e0e0e0); }
+
+  .zg-detail-panel {
+    padding: 12px 16px 12px 56px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--zg-text-color, #555);
+  }
+
+  /* ─── Row Grouping ─────────────────────────────────── */
+  .zg-row-group-header {
+    cursor: pointer;
+    background: var(--zg-header-bg, #f0f4f8) !important;
+  }
+  .zg-row-group-header:hover { background: #e8ecf0 !important; }
+
+  .zg-td-group-header {
+    padding: 6px 12px !important;
+    font-size: 0.82rem;
+    border-bottom: 1px solid var(--zg-border-color, #ddd);
+  }
+
+  .zg-group-chevron {
+    display: inline-block;
+    font-size: 0.6rem;
+    margin-right: 8px;
+    color: #666;
+    transition: transform 0.2s ease;
+  }
+  .zg-group-chevron--expanded { transform: rotate(90deg); }
+
+  .zg-row-subtotal {
+    background: #f5f7fa !important;
+    font-weight: 600;
+    font-style: italic;
+  }
+  .zg-td-subtotal {
+    border-top: 1px dashed var(--zg-border-color, #ccc);
+    font-size: 0.8rem;
+  }
+
+  /* ─── Column Pinning ───────────────────────────────── */
+  .zg-th-pinned, .zg-td-pinned {
+    box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  /* ─── Context Menu ─────────────────────────────────── */
+  .zg-context-menu {
+    position: absolute;
+    z-index: 20;
+    min-width: 160px;
+    background: var(--zg-bg, #fff);
+    border: 1px solid var(--zg-border-color, #ddd);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px 0;
+    font-size: 0.8rem;
+  }
+
+  .zg-context-item {
+    padding: 6px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s;
+  }
+  .zg-context-item:hover {
+    background: var(--zg-row-hover-bg, #f0f7ff);
+  }
+
+  .zg-context-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--zg-border-color, #eee);
+  }
+
+  /* ─── Column Resize Handle ─────────────────────────── */
+  .zg-resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 4;
+  }
+  .zg-resize-handle:hover {
+    background: var(--zg-primary, #f59e0b);
+    opacity: 0.5;
+  }
+
+  .zg-th {
+    position: relative;
+  }
+
+  /* ─── Column Groups (Multi-level Headers) ──────────── */
+  .zg-column-group-row .zg-th-group {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    background: var(--zg-header-bg, #f0f4f8);
+    border-bottom: 1px solid var(--zg-border-color, #ddd);
+    border-right: 1px solid var(--zg-border-color, #ddd);
+  }
+  .zg-th-group-empty {
+    border-right: none;
+  }
+
+  /* ─── Avatar Cell ──────────────────────────────────── */
+  .zg-avatar-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .zg-avatar {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .zg-avatar--circular { border-radius: 50%; }
+  .zg-avatar--rounded { border-radius: 4px; }
+  .zg-avatar--square { border-radius: 0; }
+
+  .zg-avatar-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+  .zg-avatar-subtitle {
+    font-size: 0.7rem;
+    color: #999;
+  }
+
+  /* ─── Image Thumbnail ──────────────────────────────── */
+  .zg-thumb {
+    object-fit: cover;
+    border-radius: 4px;
+    vertical-align: middle;
+  }
+
+  /* ─── Link ─────────────────────────────────────────── */
+  .zg-link {
+    color: var(--zg-primary, #2563eb);
+    text-decoration: none;
+  }
+  .zg-link:hover {
+    text-decoration: underline;
+  }
+
+  /* ─── Mobile Responsive ────────────────────────────── */
+  @media (max-width: 767px) {
+    :host {
+      font-size: 0.78rem;
+    }
+    .zg-th, .zg-td {
+      padding: 4px 6px;
+      font-size: 0.75rem;
+    }
+    .zg-toolbar {
+      flex-wrap: wrap;
+      padding: 4px 8px;
+    }
+    .zg-toolbar-right {
+      flex-wrap: wrap;
+    }
+    .zg-btn {
+      padding: 3px 6px;
+      font-size: 0.7rem;
+    }
+    .zg-footer {
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 0.72rem;
+    }
+    .zg-page-info {
+      font-size: 0.72rem;
+    }
+    .zg-avatar {
+      width: 22px;
+      height: 22px;
+    }
+    .zg-detail-panel {
+      padding: 8px 12px 8px 40px;
+    }
+  }
 `;
