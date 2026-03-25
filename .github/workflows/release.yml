@@ -1,0 +1,192 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'       # Push de tag v0.2.1, v1.0.0, etc.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.3.0). Leave empty to use package.json version.'
+        required: false
+        type: string
+
+permissions:
+  contents: write   # Crear releases
+  packages: write
+
+jobs:
+  build-test:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Verify TypeScript (no errors)
+        run: |
+          cd packages/core && npx tsc --noEmit
+          cd ../web-component && npx tsc --noEmit
+          cd ../react && npx tsc --noEmit
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            packages/core/dist/
+            packages/web-component/dist/
+            packages/react/dist/
+            packages/vue/dist/
+            packages/angular/dist/
+
+  publish-npm:
+    name: Publish to npm
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: packages/
+
+      - name: Rebuild (ensure dist/ in place)
+        run: npx turbo build
+
+      - name: Bump version (if manual input)
+        if: ${{ inputs.version != '' }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          for pkg in packages/core packages/web-component packages/react packages/vue packages/angular; do
+            cd "$pkg"
+            npm version "$VERSION" --no-git-tag-version
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Read version from core
+        id: version
+        run: echo "version=$(node -p "require('./packages/core/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish @zentto/datagrid-core
+        run: cd packages/core && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @zentto/datagrid
+        run: cd packages/web-component && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @zentto/datagrid-react
+        run: cd packages/react && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @zentto/datagrid-vue
+        run: cd packages/vue && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @zentto/datagrid-angular
+        run: cd packages/angular && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog
+
+      - name: Get version
+        id: ver
+        run: echo "version=${{ needs.publish-npm.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          VERSION="v${{ steps.ver.outputs.version }}"
+
+          # Find previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "Previous tag: $PREV_TAG"
+
+          # Generate changelog from commits
+          CHANGES=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges 2>/dev/null || echo "- Initial release")
+
+          # Count packages
+          CORE_VER=$(node -p "require('./packages/core/package.json').version")
+
+          # Build release body
+          cat > release-notes.md <<NOTES
+          ## $VERSION
+
+          ### Changes
+
+          $CHANGES
+
+          ### Published Packages
+
+          | Package | Version | npm |
+          |---------|---------|-----|
+          | \`@zentto/datagrid-core\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-core)](https://www.npmjs.com/package/@zentto/datagrid-core) |
+          | \`@zentto/datagrid\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid)](https://www.npmjs.com/package/@zentto/datagrid) |
+          | \`@zentto/datagrid-react\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-react)](https://www.npmjs.com/package/@zentto/datagrid-react) |
+          | \`@zentto/datagrid-vue\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-vue)](https://www.npmjs.com/package/@zentto/datagrid-vue) |
+          | \`@zentto/datagrid-angular\` | $CORE_VER | [![npm](https://img.shields.io/npm/v/@zentto/datagrid-angular)](https://www.npmjs.com/package/@zentto/datagrid-angular) |
+
+          ---
+          Install: \`npm install @zentto/datagrid@$CORE_VER\`
+          NOTES
+
+      - name: Create or update tag
+        run: |
+          VERSION="v${{ steps.ver.outputs.version }}"
+          # Create tag if it doesn't exist (for workflow_dispatch)
+          if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
+            git tag "$VERSION"
+            git push origin "$VERSION"
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ steps.ver.outputs.version }}"
+          # Delete existing release if re-running
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file release-notes.md \
+            --latest
