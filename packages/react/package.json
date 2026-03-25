@@ -18,8 +18,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@zentto/datagrid": "workspace:*",
-    "@zentto/datagrid-core": "workspace:*",
+    "@zentto/datagrid": "*",
+    "@zentto/datagrid-core": "*",
     "@lit/react": "^1.0.0"
   },
   "peerDependencies": {

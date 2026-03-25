@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@zentto/datagrid-core": "workspace:*",
+    "@zentto/datagrid-core": "*",
     "lit": "^3.2.0"
   },
   "devDependencies": {
