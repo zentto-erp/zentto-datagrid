@@ -95,7 +95,7 @@ jobs:
         with:
           node-version: 20
           registry-url: https://npm.pkg.github.com
-          scope: '@zentto'
+          scope: '@zentto-erp'
 
       - run: npm ci
       - run: npx turbo build
@@ -107,23 +107,24 @@ jobs:
             cd "$pkg" && npm version "${{ inputs.version }}" --no-git-tag-version && cd "$GITHUB_WORKSPACE"
           done
 
-      - name: Configure GitHub Packages registry
+      - name: Rewrite packages for GitHub Packages (@zentto -> @zentto-erp)
         run: |
-          for pkg in core web-component react vue angular; do
-            cat > "packages/$pkg/.npmrc" <<EOF
-          @zentto:registry=https://npm.pkg.github.com
-          //npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}
-          EOF
-          done
+          # GitHub Packages requires scope = GitHub owner/org
+          # Our npm scope is @zentto but org is zentto-erp
+          # Rename temporarily for GitHub Packages only
+          declare -A NAME_MAP
+          NAME_MAP[core]="@zentto-erp/datagrid-core"
+          NAME_MAP[web-component]="@zentto-erp/datagrid"
+          NAME_MAP[react]="@zentto-erp/datagrid-react"
+          NAME_MAP[vue]="@zentto-erp/datagrid-vue"
+          NAME_MAP[angular]="@zentto-erp/datagrid-angular"
 
-      - name: Set repository field for GitHub Packages
-        run: |
           for pkg in core web-component react vue angular; do
             cd "packages/$pkg"
-            # GitHub Packages requires repository.url to match the repo
             node -e "
               const fs = require('fs');
               const p = JSON.parse(fs.readFileSync('package.json','utf8'));
+              p.name = '${NAME_MAP[$pkg]}';
               p.repository = { type: 'git', url: 'https://github.com/zentto-erp/zentto-datagrid.git' };
               p.publishConfig = { registry: 'https://npm.pkg.github.com' };
               fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
@@ -138,7 +139,7 @@ jobs:
           for pkg in core web-component react vue angular; do
             echo "Publishing packages/$pkg to GitHub Packages..."
             cd "packages/$pkg"
-            npm publish || echo "⚠️ packages/$pkg already published or failed"
+            npm publish || echo "::warning::packages/$pkg already published or failed"
             cd "$GITHUB_WORKSPACE"
           done
 
