@@ -1,3 +1,5 @@
+[🇪🇸 Leer en Español](README.es.md)
+
 <p align="center">
   <img src="https://zentto.net/favicon.svg" width="64" alt="Zentto Logo" />
 </p>
