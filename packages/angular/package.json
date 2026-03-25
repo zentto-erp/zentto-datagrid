@@ -1,7 +1,7 @@
 {
-  "name": "@zentto/datagrid-core",
+  "name": "@zentto/datagrid-angular",
   "version": "0.2.0",
-  "description": "Pure logic engine for ZenttoDataGrid — sort, filter, group, pivot, aggregate, export. Zero UI dependencies.",
+  "description": "Angular wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,16 +15,20 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run",
     "clean": "rm -rf dist"
   },
-  "devDependencies": {
-    "vitest": "^3.0.0"
+  "dependencies": {
+    "@zentto/datagrid": "*",
+    "@zentto/datagrid-core": "*"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=17",
+    "@angular/common": ">=17"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/zentto-erp/zentto-datagrid"
   },
-  "keywords": ["datagrid", "table", "grid", "pivot", "grouping", "filter", "sort", "export"]
+  "keywords": ["datagrid", "angular", "table", "grid", "web-component", "pivot", "zentto"]
 }

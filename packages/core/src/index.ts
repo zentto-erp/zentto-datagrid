@@ -49,8 +49,28 @@ export type { FindMatch } from './search/find';
 // Selection & Clipboard
 export { copyToClipboard, copyCellValue } from './selection/clipboard';
 
+// Range Selection
+export { normalizeRange, isCellInRange, getRangeSize, extractRangeData, copyRangeToClipboard } from './selection/range-selection';
+export type { CellAddress, SelectionRange, NormalizedRange } from './selection/range-selection';
+
+// Clipboard Paste
+export { parseClipboardData, applyPasteData } from './selection/paste';
+export type { PasteData } from './selection/paste';
+
 // Formulas
 export { evaluateFormula, applyFormulas } from './data/formula';
+
+// Virtual Scroll
+export { calculateVirtualScroll, calculateDynamicVirtualScroll } from './virtualization/virtual-scroll';
+export type { VirtualScrollConfig, VirtualScrollResult } from './virtualization/virtual-scroll';
+
+// Undo/Redo
+export { UndoRedoStack } from './history/undo-redo';
+export type { EditAction } from './history/undo-redo';
+
+// Sparklines
+export { processSparklineData, sparklineLinePath, sparklineAreaPath, sparklineBars } from './data/sparkline';
+export type { SparklineType, SparklineConfig, SparklineData } from './data/sparkline';
 
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';

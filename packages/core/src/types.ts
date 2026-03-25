@@ -107,6 +107,14 @@ export interface ColumnDef {
   renderCell?: (value: unknown, row: GridRow) => string;
   /** Custom header render */
   renderHeader?: () => string;
+
+  // ─── Sparkline ──────────────────────────────────────
+  /** Sparkline type — renders a mini chart from an array field */
+  sparkline?: 'line' | 'bar' | 'area';
+  /** Field containing the sparkline data array (defaults to this column's field) */
+  sparklineField?: string;
+  /** Sparkline color override */
+  sparklineColor?: string;
 }
 
 /** Column group (multi-level headers) */
@@ -166,6 +174,10 @@ export interface GridEvents {
   'row-expand': { row: GridRow; expanded: boolean };
   'drag-start': { rows: GridRow[]; group?: string };
   'drag-drop': { rows: GridRow[]; sourceGroup?: string; targetGroup?: string };
+  'undo': { action: unknown };
+  'redo': { action: unknown };
+  'paste': { changes: unknown[]; rows: number; cols: number };
+  'range-select': { startRow: number; endRow: number; startCol: number; endCol: number };
 }
 
 /** Filter panel field definition — declared from React, rendered inside the grid toolbar */
@@ -303,4 +315,13 @@ export interface GridOptions {
 
   // ─── Layout Persistence ───────────────
   gridId?: string;
+
+  // ─── Virtual Scroll ────────────────────
+  enableVirtualScroll?: boolean;
+
+  // ─── Undo/Redo ─────────────────────────
+  enableUndoRedo?: boolean;
+
+  // ─── Range Selection ───────────────────
+  enableRangeSelection?: boolean;
 }

@@ -8,7 +8,7 @@
 
 <p align="center">
   <strong>The free, open-source data grid with enterprise features.</strong><br />
-  90+ features. Zero framework lock-in. One web component.
+  100+ features. Zero framework lock-in. React, Vue, Angular, or vanilla HTML.
 </p>
 
 <p align="center">
@@ -53,10 +53,18 @@ Most enterprise data grids charge hundreds or thousands of dollars per developer
 | Built-in theming (light/dark/custom) | Yes | Yes | Yes |
 | i18n (en, es, pt) | Yes | Yes | Yes |
 | Layout persistence | Yes | Yes | Yes |
+| Virtual scroll (100K+ rows) | Yes | Yes | Yes |
+| Sparklines (mini charts in cells) | Yes | No | Yes |
+| Undo/Redo (Ctrl+Z/Y) | Yes | No | Yes |
+| Excel-like range selection | Yes | No | Yes |
+| Paste from Excel (Ctrl+V) | Yes | No | Yes |
+| ARIA + keyboard accessibility | Yes | Yes | Yes |
 | Web component (framework-agnostic) | Yes | No | No |
 | React wrapper | Yes | Native | Yes |
+| Vue wrapper | Yes | No | No |
+| Angular wrapper | Yes | No | Yes |
 | Zero external dependencies (core) | Yes | No | No |
-| Bundle size (gzipped) | ~15 KB | ~200 KB | ~300 KB |
+| Bundle size (gzipped) | ~18 KB | ~200 KB | ~300 KB |
 
 ---
 
@@ -99,7 +107,10 @@ Most enterprise data grids charge hundreds or thousands of dollars per developer
 
 ### Selection & Clipboard
 - Row selection (click to select)
+- **Excel-like range selection** (click+drag, Shift+Arrow) `NEW v0.2`
 - Copy all data to clipboard
+- **Copy selected range** (Ctrl+C on range) `NEW v0.2`
+- **Paste from Excel / Google Sheets** (Ctrl+V) `NEW v0.2`
 - Copy individual cell value (context menu)
 - Copy entire row (context menu)
 
@@ -199,6 +210,45 @@ Most enterprise data grids charge hundreds or thousands of dollars per developer
 - `=IF({stock} > 100, "High", "Low")`
 - Formulas defined declaratively as props
 
+### Virtual Scroll `NEW v0.2`
+- Renders only visible rows for 100K+ datasets without lag
+- Configurable overscan (extra rows above/below viewport)
+- Enable with `enable-virtual-scroll` attribute
+
+### Sparklines `NEW v0.2`
+- Mini charts rendered as SVG inside grid cells
+- Three types: `line`, `bar`, `area`
+- Configurable color, auto-detects trend (up/down/flat)
+- Defined per column: `{ sparkline: 'line', sparklineField: 'history' }`
+
+### Undo/Redo `NEW v0.2`
+- Full edit history with Ctrl+Z (undo) and Ctrl+Y/Ctrl+Shift+Z (redo)
+- Tracks cell edits, row additions, deletions, and paste operations
+- Undo/redo buttons in toolbar with `enable-undo-redo`
+- Configurable stack size (default 200)
+
+### Range Selection `NEW v0.2`
+- Excel-like click+drag to select a range of cells
+- Shift+Arrow keys to extend selection
+- Ctrl+C copies the selected range as tab-separated text
+- `range-select` event with coordinates
+- Enable with `enable-range-selection`
+
+### Paste from Excel `NEW v0.2`
+- Ctrl+V pastes tab-separated data from Excel, Google Sheets, or any spreadsheet
+- Auto-converts number and boolean types based on column definitions
+- Integrates with undo/redo (paste can be undone)
+- Enable with `enable-paste`
+
+### Accessibility `NEW v0.2`
+- ARIA roles: `grid`, `row`, `gridcell`, `columnheader`, `rowgroup`
+- `aria-sort` on sortable columns (ascending/descending/none)
+- `aria-selected` on active cells and selected rows
+- `aria-rowindex` and `aria-colindex` for screen reader navigation
+- Full keyboard navigation (Arrow keys, Tab, Enter, F2, Escape)
+- Focus-visible outlines on all interactive elements
+- Screen-reader-only text for status information
+
 ---
 
 ## Quick Start
@@ -261,19 +311,56 @@ export default function App() {
 }
 ```
 
-### Vue (coming soon)
+### Vue 3
 
 ```bash
-npm install @zentto/datagrid-vue   # planned
+npm install @zentto/datagrid-vue
 ```
 
-### Angular (coming soon)
+```vue
+<template>
+  <ZenttoDataGrid :columns="columns" :rows="rows" show-totals @row-click="onRowClick" />
+</template>
+
+<script setup lang="ts">
+import { ZenttoDataGrid } from '@zentto/datagrid-vue';
+import type { ColumnDef } from '@zentto/datagrid-vue';
+
+const columns: ColumnDef[] = [
+  { field: 'name', header: 'Name', sortable: true },
+  { field: 'price', header: 'Price', type: 'number', currency: 'USD' },
+];
+const rows = [{ name: 'Widget', price: 9.99 }];
+const onRowClick = (detail: any) => console.log(detail.row);
+</script>
+```
+
+### Angular 17+
 
 ```bash
-npm install @zentto/datagrid-angular   # planned
+npm install @zentto/datagrid-angular
 ```
 
-> Since `<zentto-grid>` is a standard web component, it works in Vue and Angular today with no wrapper. Framework-specific packages will add type-safe bindings.
+```typescript
+import { ZenttoDataGridComponent, ZENTTO_GRID_SCHEMA } from '@zentto/datagrid-angular';
+
+@Component({
+  standalone: true,
+  imports: [ZenttoDataGridComponent],
+  schemas: [ZENTTO_GRID_SCHEMA],
+  template: `
+    <zentto-data-grid
+      [columns]="columns"
+      [rows]="rows"
+      [showTotals]="true"
+      (rowClick)="onRowClick($event)">
+    </zentto-data-grid>
+  `
+})
+export class MyComponent { ... }
+```
+
+> `<zentto-grid>` is a standard web component -- it also works natively in Svelte, Solid, or vanilla HTML without any wrapper.
 
 ---
 

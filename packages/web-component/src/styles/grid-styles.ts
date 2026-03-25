@@ -96,14 +96,50 @@ export const gridStyles = css`
     --zg-header-hover: rgba(255, 255, 255, 0.05);
     --zg-row-bg: #1b1f27;
     --zg-row-stripe: #21252d;
-    --zg-row-hover: rgba(230, 126, 34, 0.1);
-    --zg-row-selected: rgba(230, 126, 34, 0.16);
+    --zg-row-hover: rgba(230, 126, 34, 0.12);
+    --zg-row-selected: rgba(230, 126, 34, 0.18);
     --zg-footer-bg: #242830;
     --zg-input-bg: #181c24;
     --zg-input-border: rgba(255, 255, 255, 0.14);
+    --zg-primary-soft: rgba(230, 126, 34, 0.15);
+    --zg-focus-ring: 0 0 0 3px rgba(230, 126, 34, 0.3);
+    --zg-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
     --zg-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
     --zg-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5);
+    --zg-success: #34d399;
+    --zg-error: #f87171;
+    --zg-warning: #fbbf24;
+    --zg-info: #60a5fa;
   }
+
+  /* Dark mode overrides for hardcoded elements */
+  /* Dark mode explicit overrides */
+  .zg-theme-dark .zg-td { color: #dce0e5; }
+  .zg-theme-dark .zg-th { color: #e0e3e8; }
+  .zg-theme-dark .zg-loading { background: rgba(27, 31, 39, 0.75); }
+  .zg-theme-dark .zg-toggle-thumb { background: #dce0e5; }
+  .zg-theme-dark .zg-config-code { background: #0d1117; color: #c9d1d9; }
+  .zg-theme-dark .zg-bottom-sheet { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-datepicker { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-datepicker-day { color: #dce0e5; }
+  .zg-theme-dark .zg-chip--filled { color: #1b1f27; }
+  .zg-theme-dark .zg-import-modal { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-config-fw-tab--active { color: #1b1f27; }
+  .zg-theme-dark .zg-config-panel { background: #1b1f27; color: #dce0e5; }
+  .zg-theme-dark .zg-config-select { background: #181c24; color: #dce0e5; border-color: rgba(255,255,255,0.14); }
+  .zg-theme-dark .zg-context-menu { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-header-menu { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-toolbar-panel { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-filter-input { background: #181c24; color: #dce0e5; }
+  .zg-theme-dark .zg-find-input { background: #181c24; color: #dce0e5; }
+  .zg-theme-dark .zg-edit-input { color: #dce0e5; border-bottom-color: var(--zg-primary); }
+  .zg-theme-dark .zg-page-size { background: #181c24; color: #dce0e5; }
+  .zg-theme-dark .zg-btn { background: #242830; color: #dce0e5; border-color: rgba(255,255,255,0.14); }
+  .zg-theme-dark .zg-btn:hover { background: #2d323c; }
+  .zg-theme-dark .zg-row-group-header { background: #242830 !important; }
+  .zg-theme-dark .zg-row-totals { background: #242830; }
+  .zg-theme-dark .zg-td-detail { background: #1e2228; }
+  .zg-theme-dark .zg-group-chip { background: #242830; color: #dce0e5; border-color: rgba(255,255,255,0.14); }
 
   .zg-theme-zentto {
     --zg-primary: #f59e0b;
@@ -425,7 +461,13 @@ export const gridStyles = css`
   }
   .zg-td-right { text-align: right; letter-spacing: -0.01em; }
   .zg-td-row-num { text-align: center; color: var(--zg-text-muted); font-size: 11px; }
-  .zg-td-totals { font-weight: 700; border-top: 2px solid var(--zg-border-strong); }
+  .zg-td-totals {
+    font-weight: 700;
+    border-top: 2px solid var(--zg-border-strong);
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
 
   /* ═══════════════════════════════════════════════
      DENSITY
@@ -889,18 +931,29 @@ export const gridStyles = css`
 
   .zg-toolbar-sep { width: 1px; height: 20px; background: var(--zg-border); margin: 0 2px; }
 
-  .zg-td--editable { cursor: text; }
-  .zg-td--editable:hover { outline: 1px dashed var(--zg-primary); outline-offset: -1px; }
+  .zg-td--editable { cursor: cell; }
+  .zg-td--editable:hover { background: rgba(0,0,0,0.015); }
+
+  /* Active cell (Excel-like subtle border) */
+  .zg-td--active {
+    outline: 1.5px solid var(--zg-primary) !important;
+    outline-offset: -1.5px;
+  }
 
   .zg-edit-input {
     width: 100%;
-    border: 2px solid var(--zg-primary);
-    border-radius: 3px;
-    padding: 2px 6px;
-    font-size: inherit; font-family: inherit;
-    background: var(--zg-input-bg);
+    height: 100%;
+    border: none;
+    border-bottom: 1.5px solid var(--zg-primary);
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    font-size: inherit;
+    font-family: inherit;
+    background: transparent;
     color: var(--zg-text);
-    outline: none; box-sizing: border-box;
+    outline: none;
+    box-sizing: border-box;
   }
 
   .zg-new-row { background: var(--zg-primary-soft) !important; }
@@ -998,6 +1051,115 @@ export const gridStyles = css`
   }
 
   /* ═══════════════════════════════════════════════
+     DATE PICKER (inline calendar)
+     ═══════════════════════════════════════════════ */
+
+  .zg-datepicker {
+    position: absolute;
+    z-index: 30;
+    background: var(--zg-bg);
+    border: 1px solid var(--zg-border);
+    border-radius: var(--zg-radius-lg);
+    box-shadow: var(--zg-shadow-lg);
+    padding: 8px;
+    width: 240px;
+    font-size: 12px;
+  }
+
+  .zg-datepicker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px 6px;
+  }
+
+  .zg-datepicker-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--zg-text);
+  }
+
+  .zg-datepicker-nav {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--zg-text-secondary);
+    padding: 4px;
+    border-radius: var(--zg-radius);
+    line-height: 1;
+    display: flex;
+  }
+  .zg-datepicker-nav:hover { background: var(--zg-primary-soft); color: var(--zg-primary); }
+
+  .zg-datepicker-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    text-align: center;
+  }
+
+  .zg-datepicker-dayname {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--zg-text-muted);
+    padding: 4px 0;
+  }
+
+  .zg-datepicker-day {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 5px 0;
+    border-radius: var(--zg-radius);
+    font-size: 12px;
+    color: var(--zg-text);
+    font-family: inherit;
+    transition: all 0.1s;
+  }
+  .zg-datepicker-day:hover { background: var(--zg-primary-soft); }
+
+  .zg-datepicker-day--selected {
+    background: var(--zg-primary) !important;
+    color: #fff !important;
+    font-weight: 700;
+  }
+
+  .zg-datepicker-day--today {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+    font-weight: 600;
+  }
+
+  .zg-datepicker-day--empty {
+    display: block;
+  }
+
+  .zg-datepicker-footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid var(--zg-border);
+    margin-top: 6px;
+  }
+
+  .zg-datepicker-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--zg-primary);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 3px 6px;
+    border-radius: var(--zg-radius);
+    transition: background 0.1s;
+  }
+  .zg-datepicker-btn:hover { background: var(--zg-primary-soft); }
+
+  .zg-datepicker-btn--clear { color: var(--zg-error); }
+  .zg-datepicker-btn--clear:hover { background: rgba(214, 48, 49, 0.08); }
+
+  /* ═══════════════════════════════════════════════
      BOTTOM SHEET (mobile detail drawer)
      ═══════════════════════════════════════════════ */
 
@@ -1089,6 +1251,394 @@ export const gridStyles = css`
   @keyframes zg-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  /* ═══════════════════════════════════════════════
+     CONFIGURATOR PANEL (built-in sidebar)
+     ═══════════════════════════════════════════════ */
+
+  .zg-config-wrapper {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .zg-config-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .zg-config-panel {
+    width: 260px;
+    min-width: 260px;
+    border-left: 1px solid var(--zg-border);
+    background: var(--zg-surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 12.5px;
+  }
+
+  .zg-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--zg-border);
+    background: var(--zg-header-bg);
+  }
+
+  .zg-config-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--zg-text);
+  }
+
+  .zg-config-close {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--zg-text-muted);
+    padding: 2px;
+    border-radius: var(--zg-radius);
+    line-height: 1;
+  }
+  .zg-config-close:hover { color: var(--zg-text); background: var(--zg-primary-soft); }
+
+  /* Tabs */
+  .zg-config-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--zg-border);
+    background: var(--zg-bg);
+  }
+
+  .zg-config-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--zg-text-muted);
+    font-size: 13px;
+    transition: color 0.15s, border-color 0.15s;
+    border-bottom: 2px solid transparent;
+  }
+  .zg-config-tab:hover { color: var(--zg-text); }
+  .zg-config-tab--active {
+    color: var(--zg-primary);
+    border-bottom-color: var(--zg-primary);
+  }
+
+  /* Body */
+  .zg-config-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Section */
+  .zg-config-section {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--zg-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 10px 0 6px;
+  }
+  .zg-config-section:first-child { margin-top: 0; }
+
+  /* Switch row */
+  .zg-config-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .zg-config-switch-label {
+    font-size: 12.5px;
+    color: var(--zg-text);
+    cursor: pointer;
+    flex: 1;
+  }
+
+  /* Toggle switch (pure CSS) */
+  .zg-toggle {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .zg-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+  .zg-toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--zg-border-strong);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .zg-toggle input:checked + .zg-toggle-track {
+    background: var(--zg-primary);
+  }
+  .zg-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    pointer-events: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  }
+  .zg-toggle input:checked ~ .zg-toggle-thumb {
+    transform: translateX(16px);
+  }
+
+  /* Select */
+  .zg-config-select-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 4px 0;
+  }
+
+  .zg-config-select-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--zg-text-muted);
+  }
+
+  .zg-config-select {
+    border: 1px solid var(--zg-input-border);
+    border-radius: var(--zg-radius);
+    padding: 5px 24px 5px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--zg-input-bg);
+    color: var(--zg-text);
+    outline: none;
+    width: 100%;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235f6368' d='M3 5l3 3 3-3z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    transition: border-color 0.15s;
+  }
+  .zg-config-select:focus { border-color: var(--zg-primary); }
+
+  /* Chip */
+  .zg-config-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 8px;
+    background: var(--zg-primary-soft);
+    border: 1px solid var(--zg-primary);
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--zg-primary);
+    margin: 4px 0;
+  }
+
+  .zg-config-chip-x {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--zg-primary);
+    font-size: 10px;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.7;
+  }
+  .zg-config-chip-x:hover { opacity: 1; }
+
+  /* Divider */
+  .zg-config-divider {
+    height: 1px;
+    background: var(--zg-border);
+    margin: 8px 0;
+  }
+
+  /* Inline flex for paired selects */
+  .zg-config-row {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+  }
+  .zg-config-row > * { flex: 1; }
+
+  /* Code block */
+  .zg-config-code {
+    margin: 0;
+    padding: 10px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-size: 10.5px;
+    font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    border-radius: var(--zg-radius);
+    overflow: auto;
+    max-height: 400px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+
+  /* Code framework tabs */
+  .zg-config-fw-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .zg-config-fw-tab {
+    padding: 3px 8px;
+    border: 1px solid var(--zg-border);
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--zg-bg);
+    color: var(--zg-text-secondary);
+    transition: all 0.15s;
+  }
+  .zg-config-fw-tab:hover { border-color: var(--zg-primary); }
+  .zg-config-fw-tab--active {
+    background: var(--zg-primary);
+    color: #fff;
+    border-color: var(--zg-primary);
+  }
+
+  /* Hint text */
+  .zg-config-hint {
+    font-size: 11px;
+    color: var(--zg-text-muted);
+    line-height: 1.4;
+    margin: 4px 0;
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.2 — VIRTUAL SCROLL
+     ═══════════════════════════════════════════════ */
+
+  .zg-virtual-scroll {
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .zg-virtual-scroll .zg-table {
+    position: relative;
+    will-change: transform;
+  }
+
+  .zg-virtual-spacer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.2 — RANGE SELECTION
+     ═══════════════════════════════════════════════ */
+
+  .zg-td--in-range {
+    background: var(--zg-primary-soft) !important;
+    outline: none;
+  }
+
+  /* Border around the entire range block */
+  .zg-td--in-range::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 1px solid var(--zg-primary);
+    opacity: 0.3;
+  }
+
+  .zg-td--active {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+    z-index: 1;
+    position: relative;
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.2 — SPARKLINES
+     ═══════════════════════════════════════════════ */
+
+  .zg-sparkline {
+    display: inline-block;
+    vertical-align: middle;
+    overflow: visible;
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.2 — UNDO/REDO TOOLBAR
+     ═══════════════════════════════════════════════ */
+
+  .zg-toolbar-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--zg-border);
+    flex-shrink: 0;
+    margin: 0 2px;
+  }
+
+  /* ═══════════════════════════════════════════════
+     ACCESSIBILITY — FOCUS VISIBLE
+     ═══════════════════════════════════════════════ */
+
+  .zg-th:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+    z-index: 4;
+    position: relative;
+  }
+
+  .zg-btn-icon:focus-visible,
+  .zg-btn:focus-visible,
+  .zg-btn-primary:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-row-checkbox:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: 2px;
+  }
+
+  /* Skip link for screen readers */
+  .zg-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   /* ═══════════════════════════════════════════════

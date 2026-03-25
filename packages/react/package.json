@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -26,5 +26,10 @@
     "react": ">=18",
     "react-dom": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zentto-erp/zentto-datagrid"
+  },
+  "keywords": ["datagrid", "react", "table", "grid", "web-component", "pivot", "zentto"]
 }

@@ -16,6 +16,20 @@ import {
   copyToClipboard,
   findInGrid,
   applyFormulas,
+  saveLayout,
+  loadLayout,
+  // v0.2 — new modules
+  calculateVirtualScroll,
+  UndoRedoStack,
+  normalizeRange,
+  isCellInRange,
+  copyRangeToClipboard,
+  parseClipboardData,
+  applyPasteData,
+  processSparklineData,
+  sparklineLinePath,
+  sparklineAreaPath,
+  sparklineBars,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -28,6 +42,12 @@ import type {
   CrudConfig,
   FormulaDefinition,
   PivotConfig,
+  VirtualScrollResult,
+  EditAction,
+  SelectionRange,
+  NormalizedRange,
+  PasteData,
+  SparklineData,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -62,6 +82,10 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'enable-header-filters' }) enableHeaderFilters = false;
   @property({ type: String, attribute: 'default-currency' }) defaultCurrency = 'USD';
   @property({ type: String, attribute: 'export-filename' }) exportFilename = 'export';
+
+  // ─── Layout Persistence (IndexedDB) ─────────────────────────
+  /** Unique ID for persisting column layout, density, visibility. If empty, no persistence. */
+  @property({ type: String, attribute: 'grid-id' }) gridId = '';
   @property({ type: Array, attribute: 'page-size-options' }) pageSizeOptions = [10, 25, 50, 100];
   @property({ type: Boolean }) loading = false;
   @property({ type: String }) density: 'compact' | 'standard' | 'comfortable' = 'standard';
@@ -69,6 +93,11 @@ export class ZenttoGrid extends LitElement {
 
   // ─── Toolbar ─────────────────────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-toolbar' }) enableToolbar = true;
+  @property({ type: Boolean, attribute: 'show-toolbar-search' }) showToolbarSearch = true;
+  @property({ type: Boolean, attribute: 'show-toolbar-columns' }) showToolbarColumns = true;
+  @property({ type: Boolean, attribute: 'show-toolbar-density' }) showToolbarDensity = true;
+  @property({ type: Boolean, attribute: 'show-toolbar-export' }) showToolbarExport = true;
+  @property({ type: Boolean, attribute: 'show-toolbar-filter' }) showToolbarFilter = true;
 
   // ─── Filter Panel (declarative from React) ───────────────────
   @property({ attribute: false }) filterPanel: FilterPanelField[] = [];
@@ -151,6 +180,12 @@ export class ZenttoGrid extends LitElement {
       view:       s('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
       edit:       s('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'),
       settings:   s('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+      pivot:      s('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><path d="M14 14l3 3m0-3l-3 3"/>'),
+      pinLeft:    s('<polyline points="11 17 6 12 11 7"/><line x1="6" y1="12" x2="18" y2="12"/>'),
+      pinRight:   s('<polyline points="13 17 18 12 13 7"/><line x1="6" y1="12" x2="18" y2="12"/>'),
+      exportCsv:  s('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      exportExcel:s('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/>'),
+      exportJson: s('<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 1 2 2 2 2 0 0 1-2 2v5a2 2 0 0 1-2 2h-1"/>'),
     };
     const iconStr = this.icons[name] ?? defaults[name] ?? '';
     return iconStr;
@@ -168,11 +203,26 @@ export class ZenttoGrid extends LitElement {
   // ─── Import (available from toolbar without CRUD mode) ────────
   @property({ type: Boolean, attribute: 'enable-import' }) enableImport = false;
 
-  // ─── Settings button (emits 'settings-click' event) ──────────
+  // ─── Built-in Configurator Panel ──────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-configurator' }) enableConfigurator = false;
+  /** @deprecated Use enableConfigurator instead */
   @property({ type: Boolean, attribute: 'enable-settings' }) enableSettings = false;
 
   // ─── Formulas ─────────────────────────────────────────────────
   @property({ attribute: false }) formulas: FormulaDefinition[] = [];
+
+  // ─── v0.2 — Virtual Scroll ──────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-virtual-scroll' }) enableVirtualScroll = false;
+  @property({ type: Number, attribute: 'virtual-overscan' }) virtualOverscan = 10;
+
+  // ─── v0.2 — Undo/Redo ──────────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-undo-redo' }) enableUndoRedo = false;
+
+  // ─── v0.2 — Range Selection ─────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-range-selection' }) enableRangeSelection = false;
+
+  // ─── v0.2 — Clipboard Paste ─────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
 
   // ─── Internal state ───────────────────────────────────────────
 
@@ -193,6 +243,10 @@ export class ZenttoGrid extends LitElement {
   @state() private _expandedGroups: Set<string> = new Set();
   @state() private _groupDropOver = false;
   @state() private _groupFields: string[] = [];
+
+  // Configurator panel state
+  @state() private _configOpen = false;
+  @state() private _configTab: 'features' | 'pivot' | 'groups' | 'appearance' | 'code' = 'features';
 
   // Context Menu state
   @state() private _contextMenu: { x: number; y: number; row: GridRow; field: string; value: unknown } | null = null;
@@ -228,6 +282,25 @@ export class ZenttoGrid extends LitElement {
   @state() private _editingCell: { rowKey: string; field: string } | null = null;
   @state() private _editValue = '';
   @state() private _newRowDraft: GridRow | null = null;
+
+  // Active cell (Excel-like navigation)
+  @state() private _activeCell: { rowIdx: number; colIdx: number } | null = null;
+
+  // v0.2 — Virtual Scroll state
+  @state() private _scrollTop = 0;
+  @state() private _viewportHeight = 400;
+
+  // v0.2 — Undo/Redo
+  private _undoRedoStack = new UndoRedoStack(200);
+
+  // v0.2 — Range Selection state
+  @state() private _rangeAnchor: { rowIdx: number; colIdx: number } | null = null;
+  @state() private _rangeEnd: { rowIdx: number; colIdx: number } | null = null;
+  @state() private _isRangeSelecting = false;
+
+  // Date picker state
+  @state() private _datePickerOpen = false;
+  @state() private _datePickerMonth = new Date();
 
   // ─── i18n helper ────────────────────────────────────────────
   private _t(es: string, en: string): string {
@@ -322,6 +395,8 @@ export class ZenttoGrid extends LitElement {
   // ─── Pivot result (computed) ──────────────────────────────────
   private get _pivotResult() {
     if (!this.enablePivot || !this.pivotConfig) return null;
+    const { rowField, columnField, valueField } = this.pivotConfig;
+    if (!rowField || !columnField || !valueField) return null;
     return pivotRows(this._filteredRows, this.pivotConfig);
   }
 
@@ -334,10 +409,18 @@ export class ZenttoGrid extends LitElement {
     let source: GridRow[];
     if (this.enableGrouping && this.groupField) {
       source = this._groupedRows;
+    } else if (this.enableVirtualScroll) {
+      // Virtual scroll — return slice from sorted rows
+      const vs = this._virtualScrollResult;
+      if (vs) {
+        source = this._sortedRows.slice(vs.startIndex, vs.endIndex);
+      } else {
+        source = this._paginatedResult.rows;
+      }
     } else {
       source = this._paginatedResult.rows;
     }
-    if (this.showTotals && !(this.enableGrouping && this.groupField)) {
+    if (this.showTotals && !(this.enableGrouping && this.groupField) && !this.enableVirtualScroll) {
       const totals = computeTotals(this._sortedRows, this.columns, this.totalsLabel);
       return [...source, totals];
     }
@@ -725,60 +808,149 @@ export class ZenttoGrid extends LitElement {
     this._dispatchGridEvent('action-click', { action, row });
   }
 
-  // ─── Inline Editing ───────────────────────────────────────────
+  // ─── Inline Editing (Excel-like behavior) ──────────────────────
 
   private _isEditable(field: string): boolean {
     if (!this.enableEditing) return false;
+    // No editing in pivot mode
+    if (this._pivotResult) return false;
     if (this.crudConfig?.editableFields) return this.crudConfig.editableFields.includes(field);
     return true;
+  }
+
+  /** Click on a cell → select it (active cell). Works always, not just in edit mode. */
+  private _handleCellClick(_row: GridRow, field: string, rowIdx: number) {
+    const colIdx = this._visibleColumns.findIndex(c => c.field === field);
+    if (colIdx < 0) return;
+    this._activeCell = { rowIdx, colIdx };
   }
 
   private _startEdit(row: GridRow, field: string) {
     if (!this._isEditable(field)) return;
     this._editingCell = { rowKey: this._getRowKey(row), field };
     this._editValue = String(row[field] ?? '');
+    // Initialize date picker month from current value
+    const col = this.columns.find(c => c.field === field);
+    if (col?.type === 'date' || col?.type === 'datetime') {
+      const d = row[field] ? new Date(String(row[field])) : new Date();
+      this._datePickerMonth = isNaN(d.getTime()) ? new Date() : d;
+    }
+  }
+
+  /** Start editing active cell */
+  private _editActiveCell() {
+    if (!this._activeCell) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const row = displayRows[this._activeCell.rowIdx];
+    const col = this._visibleColumns[this._activeCell.colIdx];
+    if (row && col && this._isEditable(col.field)) {
+      this._startEdit(row, col.field);
+    }
+  }
+
+  /** Move active cell by delta */
+  /** Move active cell by delta — navigates visible non-pinned columns */
+  private _moveActiveCell(dRow: number, dCol: number) {
+    if (!this._activeCell) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const allCols = this._visibleColumns;
+    // Only navigate non-pinned columns
+    const navigable = allCols.filter(c => !this._isPinned(c.field));
+    let { rowIdx } = this._activeCell;
+    // Map current colIdx to navigable index
+    const currentField = allCols[this._activeCell.colIdx]?.field;
+    let navIdx = navigable.findIndex(c => c.field === currentField);
+    if (navIdx < 0) navIdx = 0;
+
+    navIdx += dCol;
+    rowIdx += dRow;
+    // Wrap columns
+    if (navIdx >= navigable.length) { navIdx = 0; rowIdx++; }
+    if (navIdx < 0) { navIdx = navigable.length - 1; rowIdx--; }
+    // Clamp rows
+    rowIdx = Math.max(0, Math.min(rowIdx, displayRows.length - 1));
+    // Map navigable index back to visible column index
+    const targetField = navigable[navIdx]?.field;
+    const colIdx = allCols.findIndex(c => c.field === targetField);
+    this._activeCell = { rowIdx, colIdx: colIdx >= 0 ? colIdx : 0 };
   }
 
   private _handleEditKeydown(e: KeyboardEvent, row: GridRow) {
     if (e.key === 'Enter') {
+      e.preventDefault();
       this._commitEdit(row);
+      // Move down
+      this._moveActiveCell(1, 0);
+      this._editActiveCell();
     } else if (e.key === 'Escape') {
       this._editingCell = null;
     } else if (e.key === 'Tab') {
       e.preventDefault();
       this._commitEdit(row);
-      // Move to next editable cell
-      const cols = this._visibleColumns.filter(c => this._isEditable(c.field));
-      const curIdx = cols.findIndex(c => c.field === this._editingCell?.field);
-      if (curIdx >= 0 && curIdx < cols.length - 1) {
-        this._startEdit(row, cols[curIdx + 1].field);
+      // Move right (Shift+Tab = left)
+      this._moveActiveCell(0, e.shiftKey ? -1 : 1);
+      this._editActiveCell();
+    }
+  }
+
+  /** Grid-level keyboard handler for Excel-like navigation (works always, not just edit mode) */
+  private _handleGridKeydown(e: KeyboardEvent) {
+    if (!this._activeCell) return;
+    if (this._editingCell) return; // Let edit input handle its own keys
+
+    const { key } = e;
+
+    // Arrow navigation — always works
+    if (key === 'ArrowDown') { e.preventDefault(); this._moveActiveCell(1, 0); }
+    else if (key === 'ArrowUp') { e.preventDefault(); this._moveActiveCell(-1, 0); }
+    else if (key === 'ArrowRight') { e.preventDefault(); this._moveActiveCell(0, 1); }
+    else if (key === 'ArrowLeft') { e.preventDefault(); this._moveActiveCell(0, -1); }
+    else if (key === 'Tab') { e.preventDefault(); this._moveActiveCell(0, e.shiftKey ? -1 : 1); }
+    else if (key === 'Enter') {
+      e.preventDefault();
+      if (this.enableEditing) {
+        // In edit mode: Enter starts editing the active cell
+        this._editActiveCell();
+      } else {
+        // In read-only mode: Enter moves down
+        this._moveActiveCell(1, 0);
       }
+    }
+    else if (key === 'F2' && this.enableEditing) { e.preventDefault(); this._editActiveCell(); }
+    // Type to edit: any printable character starts editing (only in edit mode)
+    else if (this.enableEditing && key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      this._editActiveCell();
     }
   }
 
   private async _commitEdit(row: GridRow) {
     if (!this._editingCell) return;
-    const { field } = this._editingCell;
+    const { rowKey, field } = this._editingCell;
+    this._editingCell = null; // Clear immediately to prevent double-commit
+
     const col = this.columns.find(c => c.field === field);
     const newValue = col?.type === 'number' ? Number(this._editValue) : this._editValue;
-    const oldValue = row[field];
 
-    if (newValue === oldValue) {
-      this._editingCell = null;
-      return;
-    }
+    // Find the actual current row by key (not the stale render reference)
+    const currentRow = this.rows.find(r => this._getRowKey(r) === rowKey);
+    if (!currentRow) return;
 
-    // Update local data
-    const updatedRow = { ...row, [field]: newValue };
+    const oldValue = currentRow[field];
+    if (newValue === oldValue) return;
+
+    // Push undo action
+    this._pushUndoAction({ type: 'cell-edit', timestamp: Date.now(), rowKey, field, oldValue, newValue });
+
+    // Update local data — create new array for Lit reactivity
+    const updatedRow = { ...currentRow, [field]: newValue };
     const idField = this.crudConfig?.idField || 'id';
-    this.rows = this.rows.map(r => this._getRowKey(r) === this._getRowKey(row) ? updatedRow : r);
-    this._editingCell = null;
+    this.rows = [...this.rows.map(r => this._getRowKey(r) === rowKey ? updatedRow : r)];
 
     // Call API if configured
     if (this.crudConfig?.baseUrl) {
       try {
         const method = this.crudConfig.methods?.update || 'PUT';
-        const url = `${this.crudConfig.baseUrl}/${row[idField]}`;
+        const url = `${this.crudConfig.baseUrl}/${currentRow[idField]}`;
         const payload = this.crudConfig.transformPayload
           ? this.crudConfig.transformPayload(updatedRow, 'update')
           : updatedRow;
@@ -793,7 +965,7 @@ export class ZenttoGrid extends LitElement {
       } catch (err) {
         this._dispatchGridEvent('crud-error', { action: 'update', row: updatedRow, error: err });
         // Rollback
-        this.rows = this.rows.map(r => this._getRowKey(r) === this._getRowKey(row) ? row : r);
+        this.rows = [...this.rows.map(r => this._getRowKey(r) === rowKey ? currentRow : r)];
       }
     } else {
       this._dispatchGridEvent('cell-edit', { row: updatedRow, field, oldValue, newValue });
@@ -874,6 +1046,85 @@ export class ZenttoGrid extends LitElement {
     } catch (err) {
       this._dispatchGridEvent('crud-error', { action: 'create', row, error: err });
     }
+  }
+
+  // ─── Date Picker (inline calendar for date fields) ──────────────
+
+  private _renderDateEditor(row: GridRow, col: ColumnDef) {
+    // Parse current value
+    const current = this._editValue ? new Date(this._editValue) : null;
+    const viewMonth = this._datePickerMonth;
+    const year = viewMonth.getFullYear();
+    const month = viewMonth.getMonth();
+
+    // Build calendar grid
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const monthNames = this.locale === 'es'
+      ? ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+      : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const dayNames = this.locale === 'es'
+      ? ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
+      : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    const days: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(d);
+
+    const selectDate = (day: number | null) => {
+      if (!day) return;
+      const d = new Date(year, month, day);
+      this._editValue = d.toISOString().split('T')[0];
+      this._commitEdit(row);
+    };
+
+    const clearDate = () => {
+      this._editValue = '';
+      this._commitEdit(row);
+    };
+
+    const prevMonth = () => {
+      this._datePickerMonth = new Date(year, month - 1, 1);
+    };
+
+    const nextMonth = () => {
+      this._datePickerMonth = new Date(year, month + 1, 1);
+    };
+
+    const isSelected = (day: number) => {
+      if (!current || isNaN(current.getTime())) return false;
+      return current.getFullYear() === year && current.getMonth() === month && current.getDate() === day;
+    };
+
+    const isToday = (day: number) => {
+      return today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+    };
+
+    return html`
+      <div class="zg-datepicker" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="zg-datepicker-header">
+          <button class="zg-datepicker-nav" @click=${prevMonth}>${this._iconHtml('pinLeft')}</button>
+          <span class="zg-datepicker-title">${monthNames[month]} ${year}</span>
+          <button class="zg-datepicker-nav" @click=${nextMonth}>${this._iconHtml('pinRight')}</button>
+        </div>
+        <div class="zg-datepicker-days">
+          ${dayNames.map(d => html`<span class="zg-datepicker-dayname">${d}</span>`)}
+          ${days.map(d => d ? html`
+            <button class="zg-datepicker-day ${isSelected(d) ? 'zg-datepicker-day--selected' : ''} ${isToday(d) ? 'zg-datepicker-day--today' : ''}"
+                    @click=${() => selectDate(d)}>${d}</button>
+          ` : html`<span class="zg-datepicker-day--empty"></span>`)}
+        </div>
+        <div class="zg-datepicker-footer">
+          <button class="zg-datepicker-btn" @click=${() => selectDate(today.getDate())}>${this._t('Hoy', 'Today')}</button>
+          <button class="zg-datepicker-btn zg-datepicker-btn--clear" @click=${clearDate}>${this._t('Borrar', 'Clear')}</button>
+          <button class="zg-datepicker-btn" @click=${() => { this._editingCell = null; }}>${this._t('Cancelar', 'Cancel')}</button>
+        </div>
+      </div>
+    `;
   }
 
   // ─── Import (Excel/JSON/CSV) ──────────────────────────────────
@@ -1306,24 +1557,235 @@ export class ZenttoGrid extends LitElement {
     this._dispatchGridEvent('filter-panel-change', { field: null, value: null, allFilters: {} });
   }
 
+  // ─── v0.2 — Virtual Scroll ────────────────────────────────────
+
+  private get _virtualScrollResult(): VirtualScrollResult | null {
+    if (!this.enableVirtualScroll) return null;
+    const rowHeight = this.density === 'compact' ? 32 : this.density === 'comfortable' ? 52 : 40;
+    const totalRows = this._sortedRows.length;
+    return calculateVirtualScroll(this._scrollTop, {
+      totalRows,
+      rowHeight,
+      viewportHeight: this._viewportHeight,
+      overscan: this.virtualOverscan,
+    });
+  }
+
+  private _handleVirtualScroll(e: Event) {
+    const el = e.target as HTMLElement;
+    this._scrollTop = el.scrollTop;
+    this._viewportHeight = el.clientHeight;
+  }
+
+  // ─── v0.2 — Undo/Redo ──────────────────────────────────────
+
+  /** Public: undo last edit */
+  undo() {
+    if (!this.enableUndoRedo) return;
+    const action = this._undoRedoStack.undo();
+    if (!action) return;
+    this._applyUndoAction(action, true);
+    this._dispatchGridEvent('undo', { action });
+  }
+
+  /** Public: redo last undone edit */
+  redo() {
+    if (!this.enableUndoRedo) return;
+    const action = this._undoRedoStack.redo();
+    if (!action) return;
+    this._applyUndoAction(action, false);
+    this._dispatchGridEvent('redo', { action });
+  }
+
+  private _applyUndoAction(action: EditAction, isUndo: boolean) {
+    if (action.type === 'cell-edit' && action.rowKey && action.field) {
+      const val = isUndo ? action.oldValue : action.newValue;
+      this.rows = this.rows.map(r =>
+        this._getRowKey(r) === action.rowKey ? { ...r, [action.field!]: val } : r
+      );
+    } else if (action.type === 'paste' && action.changes) {
+      for (const c of action.changes) {
+        const val = isUndo ? c.oldValue : c.newValue;
+        const row = this.rows.find(r => this._getRowKey(r) === c.rowKey);
+        if (row) (row as any)[c.field] = val;
+      }
+      this.rows = [...this.rows];
+    } else if (action.type === 'row-add' && action.row) {
+      if (isUndo) {
+        this.rows = this.rows.filter(r => this._getRowKey(r) !== this._getRowKey(action.row as GridRow));
+      } else {
+        this.rows = [action.row as GridRow, ...this.rows];
+      }
+    } else if (action.type === 'row-delete' && action.row) {
+      if (isUndo) {
+        const idx = action.rowIndex ?? 0;
+        const newRows = [...this.rows];
+        newRows.splice(idx, 0, action.row as GridRow);
+        this.rows = newRows;
+      } else {
+        this.rows = this.rows.filter(r => this._getRowKey(r) !== this._getRowKey(action.row as GridRow));
+      }
+    }
+    this.requestUpdate();
+  }
+
+  private _pushUndoAction(action: EditAction) {
+    if (this.enableUndoRedo) {
+      this._undoRedoStack.push(action);
+    }
+  }
+
+  // ─── v0.2 — Range Selection ─────────────────────────────────
+
+  private get _normalizedRange(): NormalizedRange | null {
+    if (!this._rangeAnchor || !this._rangeEnd) return null;
+    return normalizeRange({
+      start: { rowIndex: this._rangeAnchor.rowIdx, colIndex: this._rangeAnchor.colIdx },
+      end: { rowIndex: this._rangeEnd.rowIdx, colIndex: this._rangeEnd.colIdx },
+    });
+  }
+
+  private _isCellInRange(rowIdx: number, colIdx: number): boolean {
+    const range = this._normalizedRange;
+    if (!range) return false;
+    return isCellInRange(rowIdx, colIdx, range);
+  }
+
+  private _handleRangeMouseDown(rowIdx: number, colIdx: number, e: MouseEvent) {
+    if (!this.enableRangeSelection) return;
+    if (e.button !== 0) return; // only left click
+    this._rangeAnchor = { rowIdx, colIdx };
+    this._rangeEnd = { rowIdx, colIdx };
+    this._isRangeSelecting = true;
+    this._activeCell = { rowIdx, colIdx };
+  }
+
+  private _handleRangeMouseOver(rowIdx: number, colIdx: number) {
+    if (!this._isRangeSelecting) return;
+    this._rangeEnd = { rowIdx, colIdx };
+  }
+
+  private _handleRangeMouseUp() {
+    if (!this._isRangeSelecting) return;
+    this._isRangeSelecting = false;
+    const range = this._normalizedRange;
+    if (range) {
+      this._dispatchGridEvent('range-select', range);
+    }
+  }
+
+  private async _copyRange() {
+    const range = this._normalizedRange;
+    if (!range) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    await copyRangeToClipboard(displayRows, this._visibleColumns, range);
+  }
+
+  // ─── v0.2 — Clipboard Paste ─────────────────────────────────
+
+  private async _handlePaste(e: ClipboardEvent) {
+    if (!this.enablePaste) return;
+    if (!this._activeCell) return;
+    e.preventDefault();
+
+    const text = e.clipboardData?.getData('text/plain');
+    if (!text) return;
+
+    const pasteData = parseClipboardData(text);
+    if (pasteData.rows === 0) return;
+
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const changes = applyPasteData(
+      displayRows,
+      this._visibleColumns,
+      pasteData,
+      this._activeCell.rowIdx,
+      this._activeCell.colIdx
+    );
+
+    // Push undo action
+    this._pushUndoAction({
+      type: 'paste',
+      timestamp: Date.now(),
+      changes: changes.map(c => ({ rowKey: c.rowKey, field: c.field, oldValue: c.oldValue, newValue: c.newValue })),
+    });
+
+    this.rows = [...this.rows]; // trigger reactivity
+    this._dispatchGridEvent('paste', { changes, rows: pasteData.rows, cols: pasteData.cols });
+  }
+
+  // ─── v0.2 — Sparkline renderer ─────────────────────────────
+
+  private _renderSparkline(val: unknown, col: ColumnDef): ReturnType<typeof html> | typeof nothing {
+    const dataField = col.sparklineField || col.field;
+    const values = Array.isArray(val) ? val : [];
+    if (values.length < 2) return html`<span>${String(val ?? '')}</span>`;
+
+    const data = processSparklineData(values);
+    const w = 80;
+    const h = 24;
+    const color = col.sparklineColor || 'var(--zg-primary, #e67e22)';
+    const type = col.sparkline || 'line';
+
+    if (type === 'bar') {
+      const bars = sparklineBars(data, w, h, 1, 1);
+      return html`
+        <svg class="zg-sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+          ${bars.map(b => unsafeHTML(
+            `<rect x="${b.x.toFixed(1)}" y="${b.y.toFixed(1)}" width="${b.w.toFixed(1)}" height="${b.h.toFixed(1)}" fill="${b.isMax ? color : b.isNegative ? 'var(--zg-error, #d63031)' : color}" opacity="${b.isMax || b.isMin ? '1' : '0.6'}"/>`
+          ))}
+        </svg>
+      `;
+    }
+
+    if (type === 'area') {
+      const { linePath, areaPath } = sparklineAreaPath(data, w, h);
+      return html`
+        <svg class="zg-sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+          <path d="${areaPath}" fill="${color}" opacity="0.15"/>
+          <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5"/>
+        </svg>
+      `;
+    }
+
+    // line (default)
+    const path = sparklineLinePath(data, w, h);
+    return html`
+      <svg class="zg-sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+        <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5"/>
+        <circle cx="${(w - 2).toFixed(1)}" cy="${(2 + (h - 4) - ((data.last - data.min) / data.range) * (h - 4)).toFixed(1)}" r="2" fill="${data.trend === 'up' ? 'var(--zg-success)' : data.trend === 'down' ? 'var(--zg-error)' : color}"/>
+      </svg>
+    `;
+  }
+
   // ─── Format value ─────────────────────────────────────────────
 
-  private _formatValue(val: unknown, col: ColumnDef): string {
+  private _formatValue(val: unknown, col: ColumnDef, isTotals = false): string {
     if (val == null) return '';
 
     if (col.currency) {
+      const num = Number(val);
+      // In totals row: just number with 2 decimals, no currency symbol
+      if (isTotals) {
+        return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
+          minimumFractionDigits: 2, maximumFractionDigits: 2,
+        }).format(num);
+      }
       const code = typeof col.currency === 'string' ? col.currency : this.defaultCurrency;
       try {
         return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
           style: 'currency', currency: code, minimumFractionDigits: 2,
-        }).format(Number(val));
+        }).format(num);
       } catch { return String(val); }
     }
 
     if (col.type === 'number') {
+      const num = Number(val);
+      const hasDecimals = num % 1 !== 0;
       return new Intl.NumberFormat(this.locale === 'es' ? 'es-VE' : 'en-US', {
-        minimumFractionDigits: 2,
-      }).format(Number(val));
+        minimumFractionDigits: hasDecimals ? 2 : 0,
+        maximumFractionDigits: 2,
+      }).format(num);
     }
 
     if (col.type === 'date' || col.type === 'datetime') {
@@ -1340,7 +1802,13 @@ export class ZenttoGrid extends LitElement {
   // ─── Render cell content ──────────────────────────────────────
 
   private _renderCellContent(val: unknown, col: ColumnDef, row: GridRow) {
-    if (col.renderCell) return html`<span .innerHTML=${col.renderCell(val, row)}></span>`;
+    const isTotals = !!row['__zentto_totals__'];
+    if (col.renderCell && !isTotals) return html`<span .innerHTML=${col.renderCell(val, row)}></span>`;
+
+    // Sparkline columns
+    if (col.sparkline && !isTotals) {
+      return this._renderSparkline(val, col);
+    }
 
     if (col.statusColors && val != null) {
       const color = col.statusColors[String(val)] ?? 'default';
@@ -1390,7 +1858,7 @@ export class ZenttoGrid extends LitElement {
       return html`<a class="zg-link" href="${href}" target="${col.linkTarget || '_blank'}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
     }
 
-    return html`${this._formatValue(val, col)}`;
+    return html`${this._formatValue(val, col, isTotals)}`;
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────
@@ -1398,17 +1866,59 @@ export class ZenttoGrid extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.addEventListener('keydown', this._handleKeydown);
+    this.addEventListener('paste', this._handlePasteEvent as EventListener);
+    this.addEventListener('mouseup', this._handleGlobalMouseUp);
     document.addEventListener('click', this._handleDocClick);
     window.addEventListener('resize', this._handleResize);
     if (this.enableGrouping && this.groupField) this._initGroups();
+    // Set ARIA role
+    this.setAttribute('role', 'grid');
+    this.setAttribute('aria-label', this._t('Tabla de datos', 'Data grid'));
+    // Restore layout from IndexedDB
+    this._restoreLayout();
+  }
+
+  private async _restoreLayout() {
+    if (!this.gridId) return;
+    const layout = await loadLayout(this.gridId);
+    if (!layout) return;
+    if (layout.density) this.density = layout.density;
+    if (layout.groupByField) { this.groupField = layout.groupByField; this.enableGrouping = true; this._initGroups(); }
+    if (layout.columnWidths) this._columnWidths = layout.columnWidths;
+    if (layout.columnVisibility) {
+      const hidden = new Set<string>();
+      for (const [field, visible] of Object.entries(layout.columnVisibility)) {
+        if (!visible) hidden.add(field);
+      }
+      this._hiddenColumns = hidden;
+    }
+  }
+
+  private _persistLayout() {
+    if (!this.gridId) return;
+    const visibility: Record<string, boolean> = {};
+    for (const col of this.columns) {
+      visibility[col.field] = !this._hiddenColumns.has(col.field);
+    }
+    saveLayout(this.gridId, {
+      density: this.density,
+      groupByField: this.enableGrouping ? this.groupField : undefined,
+      columnWidths: Object.keys(this._columnWidths).length > 0 ? this._columnWidths : undefined,
+      columnVisibility: visibility,
+    });
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('keydown', this._handleKeydown);
+    this.removeEventListener('paste', this._handlePasteEvent as EventListener);
+    this.removeEventListener('mouseup', this._handleGlobalMouseUp);
     document.removeEventListener('click', this._handleDocClick);
     window.removeEventListener('resize', this._handleResize);
   }
+
+  private _handlePasteEvent = (e: Event) => this._handlePaste(e as ClipboardEvent);
+  private _handleGlobalMouseUp = () => this._handleRangeMouseUp();
 
   private _initGroups() {
     if (this.enableGrouping && this.groupField && this._expandedGroups.size === 0) {
@@ -1423,6 +1933,10 @@ export class ZenttoGrid extends LitElement {
     if (changed.has('groupField') || changed.has('enableGrouping') || changed.has('rows')) {
       if (this.enableGrouping && this.groupField) this._initGroups();
     }
+    // Persist layout on relevant changes
+    if (this.gridId && (changed.has('density') || changed.has('groupField') || changed.has('enableGrouping') || changed.has('_columnWidths') || changed.has('_hiddenColumns'))) {
+      this._persistLayout();
+    }
   }
 
   private _handleDocClick = () => {
@@ -1435,18 +1949,56 @@ export class ZenttoGrid extends LitElement {
 
   private _handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      if (this._editingCell) { this._editingCell = null; return; }
       if (this._contextMenu) { this._closeContextMenu(); return; }
       if (this._headerMenu) { this._closeHeaderMenu(); return; }
       this._closeAllPanels();
+      this._activeCell = null;
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'f' && this.enableFind) {
       e.preventDefault();
       this._findOpen = true;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && this.enableClipboard) {
-      this._copyAll();
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      // Range copy takes priority, then clipboard all
+      if (this.enableRangeSelection && this._normalizedRange) {
+        e.preventDefault();
+        this._copyRange();
+      } else if (this.enableClipboard) {
+        this._copyAll();
+      }
     }
+    // Undo/Redo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && this.enableUndoRedo) {
+      e.preventDefault();
+      if (e.shiftKey) this.redo(); else this.undo();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y' && this.enableUndoRedo) {
+      e.preventDefault();
+      this.redo();
+    }
+    // Range selection with Shift+Arrow
+    if (this.enableRangeSelection && e.shiftKey && this._activeCell && ['ArrowDown','ArrowUp','ArrowLeft','ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      if (!this._rangeAnchor) {
+        this._rangeAnchor = { ...this._activeCell };
+        this._rangeEnd = { ...this._activeCell };
+      }
+      const d = e.key === 'ArrowDown' ? [1,0] : e.key === 'ArrowUp' ? [-1,0] : e.key === 'ArrowRight' ? [0,1] : [0,-1];
+      this._rangeEnd = {
+        rowIdx: Math.max(0, (this._rangeEnd?.rowIdx ?? 0) + d[0]),
+        colIdx: Math.max(0, (this._rangeEnd?.colIdx ?? 0) + d[1]),
+      };
+      return;
+    }
+    // Clear range on Escape
+    if (e.key === 'Escape' && this._rangeAnchor) {
+      this._rangeAnchor = null;
+      this._rangeEnd = null;
+    }
+    // Excel-like grid navigation
+    this._handleGridKeydown(e);
   };
 
   // ─── Mobile detection ────────────────────────────────────────
@@ -1560,10 +2112,19 @@ export class ZenttoGrid extends LitElement {
         <!-- Loading overlay -->
         ${this.loading ? html`<div class="zg-loading"><div class="zg-spinner"></div></div>` : nothing}
 
+        <!-- Content area: table + optional configurator side by side -->
+        <div class="zg-config-wrapper">
+        <div class="zg-config-main">
+
         <!-- Table -->
-        <div class="zg-table-wrapper">
-          <table class="zg-table">
-            <thead>
+        <div class="zg-table-wrapper ${this.enableVirtualScroll ? 'zg-virtual-scroll' : ''}"
+             @scroll=${this.enableVirtualScroll ? (e: Event) => this._handleVirtualScroll(e) : nothing}>
+          ${this.enableVirtualScroll && this._virtualScrollResult ? html`
+            <div class="zg-virtual-spacer" style="height:${this._virtualScrollResult.totalHeight}px"></div>
+          ` : nothing}
+          <table class="zg-table" role="grid" aria-rowcount="${this._sortedRows.length}"
+                 style="${this.enableVirtualScroll && this._virtualScrollResult ? `transform:translateY(${this._virtualScrollResult.offsetY}px)` : ''}">
+            <thead role="rowgroup">
               <!-- Column Groups -->
               ${this.columnGroups.length > 0 ? html`
                 <tr class="zg-column-group-row">
@@ -1580,7 +2141,7 @@ export class ZenttoGrid extends LitElement {
                 ` : nothing}
                 ${this.enableDragDrop ? html`<th class="zg-th zg-drag-handle" style="width:24px"></th>` : nothing}
                 ${this.enableMasterDetail ? html`<th class="zg-th zg-th-expand" style="width:32px"></th>` : nothing}
-                <th class="zg-th zg-th-row-num" style="width:40px">#</th>
+                <th class="zg-th zg-th-row-num" style="width:40px" role="columnheader" aria-label="#">#</th>
                 ${visibleCols.map((col) => {
                   const w = this._columnWidths[col.field] || col.width;
                   const pinStyle = this._getPinHeaderStyle(col.field, visibleCols);
@@ -1589,9 +2150,14 @@ export class ZenttoGrid extends LitElement {
                   <th
                     class="zg-th ${col.sortable ? 'zg-th-sortable' : ''} ${col.type === 'number' || col.currency ? 'zg-th-right' : ''} ${pinClass}"
                     style="${w ? `width:${w}px;` : col.flex ? `flex:${col.flex};` : ''}${pinStyle}"
+                    role="columnheader"
+                    aria-sort="${this._sorts.find(s => s.field === col.field)?.direction === 'asc' ? 'ascending' : this._sorts.find(s => s.field === col.field)?.direction === 'desc' ? 'descending' : 'none'}"
+                    aria-label="${col.header || col.field}"
+                    tabindex="${col.sortable ? '0' : '-1'}"
                     ?draggable=${this.enableGroupDropZone && col.groupable !== false}
                     @dragstart=${this.enableGroupDropZone ? (e: DragEvent) => this._handleHeaderDragStart(e, col.field) : nothing}
                     @click=${() => this._handleSort(col.field)}
+                    @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._handleSort(col.field); } }}
                   >
                     <span>${col.header || col.field}${this._getSortIcon(col.field)}</span>
                     ${this.enableHeaderMenu ? html`
@@ -1625,7 +2191,7 @@ export class ZenttoGrid extends LitElement {
                 </tr>
               ` : nothing}
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               ${displayRows.map((row, idx) => {
                 const isTotals = row['__zentto_totals__'];
                 const isGroupHeader = row['__zentto_group__'];
@@ -1665,6 +2231,7 @@ export class ZenttoGrid extends LitElement {
                 const isDragOver = this.enableDragDrop && this._dragOverIdx === idx;
                 return html`
                   <tr class="zg-row ${isTotals ? 'zg-row-totals' : idx % 2 ? 'zg-row-alt' : ''} ${isSelected ? 'zg-row--selected' : ''} ${isDragOver ? 'zg-row--drag-over' : ''}"
+                      role="row" aria-rowindex="${this._page * this._pageSize + idx + 1}" aria-selected="${isSelected ? 'true' : 'false'}"
                       draggable="${this.enableDragDrop && !isTotals ? 'true' : 'false'}"
                       @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: idx })}
                       @dragstart=${(e: DragEvent) => this._handleDragStart(e, row)}
@@ -1694,13 +2261,24 @@ export class ZenttoGrid extends LitElement {
                       const pinClass = this._isPinned(col.field) ? 'zg-td-pinned' : '';
                       const editable = this._isEditable(col.field) && !isTotals;
                       const isEditing = this._editingCell?.rowKey === this._getRowKey(row) && this._editingCell?.field === col.field;
+                      const colIdx = visibleCols.indexOf(col);
+                      const isActive = this._activeCell?.rowIdx === idx && this._activeCell?.colIdx === colIdx;
+                      const inRange = this.enableRangeSelection && this._isCellInRange(idx, colIdx);
                       return html`
-                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''}"
+                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''}"
                             style="${pinStyle}"
+                            role="gridcell"
+                            aria-colindex="${colIdx + 1}"
+                            aria-selected="${isActive || inRange ? 'true' : 'false'}"
                             @contextmenu=${(e: MouseEvent) => this._handleContextMenu(e, row, col.field, val)}
+                            @click=${() => this._handleCellClick(row, col.field, idx)}
+                            @mousedown=${(e: MouseEvent) => this._handleRangeMouseDown(idx, colIdx, e)}
+                            @mouseover=${() => this._handleRangeMouseOver(idx, colIdx)}
                             @dblclick=${editable ? () => this._startEdit(row, col.field) : nothing}>
-                          ${isEditing ? html`
-                            <input type="${col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}"
+                          ${isEditing ? (col.type === 'date' || col.type === 'datetime')
+                            ? this._renderDateEditor(row, col)
+                            : html`
+                            <input type="${col.type === 'number' ? 'number' : 'text'}"
                               class="zg-edit-input"
                               .value=${this._editValue}
                               @input=${(e: InputEvent) => { this._editValue = (e.target as HTMLInputElement).value; }}
@@ -1827,6 +2405,13 @@ export class ZenttoGrid extends LitElement {
           </div>
         </div>
 
+        </div><!-- /zg-config-main -->
+
+        <!-- Built-in Configurator Panel (right sidebar) -->
+        ${this._configOpen && (this.enableConfigurator || this.enableSettings) ? this._renderConfigurator() : nothing}
+
+        </div><!-- /zg-config-wrapper -->
+
         <!-- Mobile Detail Bottom Sheet -->
         ${this._detailDrawerRow ? html`
           <div class="zg-bottom-sheet-overlay" @click=${this._closeDetailDrawer}></div>
@@ -1853,6 +2438,445 @@ export class ZenttoGrid extends LitElement {
     `;
   }
 
+  // ─── Configurator Panel (built-in) ──────────────────────────────
+
+  private _toggleConfig() {
+    this._configOpen = !this._configOpen;
+    if (!this.enableConfigurator) {
+      // Legacy: emit event for external configurators
+      this._dispatchGridEvent('settings-click', {});
+    }
+  }
+
+  private _renderConfigSwitch(label: string, checked: boolean, onChange: (v: boolean) => void, tooltip = '') {
+    return html`
+      <div class="zg-config-switch" title=${tooltip || label}>
+        <label class="zg-toggle">
+          <input type="checkbox" .checked=${checked} @change=${(e: Event) => onChange((e.target as HTMLInputElement).checked)} />
+          <span class="zg-toggle-track"></span>
+          <span class="zg-toggle-thumb"></span>
+        </label>
+        <span class="zg-config-switch-label">${label}</span>
+      </div>
+    `;
+  }
+
+  private _renderConfigSelect(label: string, value: string, options: { value: string; label: string }[], onChange: (v: string) => void, tooltip = '') {
+    return html`
+      <div class="zg-config-select-group" title=${tooltip || label}>
+        <span class="zg-config-select-label">${label}</span>
+        <select class="zg-config-select" .value=${value} @change=${(e: Event) => onChange((e.target as HTMLSelectElement).value)}>
+          ${options.map(o => html`<option value=${o.value} ?selected=${o.value === value}>${o.label}</option>`)}
+        </select>
+      </div>
+    `;
+  }
+
+  /** Detect numeric columns from data */
+  private get _numericColumns(): ColumnDef[] {
+    return this.columns.filter(c => c.type === 'number' || c.currency);
+  }
+
+  /** Detect text/category columns (non-numeric, non-internal) */
+  private get _textColumns(): ColumnDef[] {
+    return this.columns.filter(c => !c.field.startsWith('__') && c.type !== 'number' && !c.currency);
+  }
+
+  /** Detect groupable columns */
+  private get _groupableColumns(): ColumnDef[] {
+    return this.columns.filter(c => c.groupable && !c.field.startsWith('__'));
+  }
+
+  private _renderConfigurator() {
+    const tab = this._configTab;
+    const tabs: { id: 'features' | 'pivot' | 'groups' | 'appearance' | 'code'; icon: string; label: string; tooltip: string }[] = [
+      { id: 'features', icon: 'columns', label: this._t('Funciones', 'Features'), tooltip: this._t('Activar/desactivar funcionalidades', 'Toggle features on/off') },
+      { id: 'pivot', icon: 'pivot', label: 'Pivot', tooltip: this._t('Tabla dinamica con filas, columnas y valores', 'Dynamic table with rows, columns and values') },
+      { id: 'groups', icon: 'drag', label: this._t('Grupos', 'Groups'), tooltip: this._t('Agrupar filas por campo', 'Group rows by field') },
+      { id: 'appearance', icon: 'density', label: this._t('Tema', 'Theme'), tooltip: this._t('Tema, densidad e idioma', 'Theme, density and language') },
+      { id: 'code', icon: 'markdown', label: this._t('Codigo', 'Code'), tooltip: this._t('Codigo copiable para React, HTML o Vue', 'Copyable code for React, HTML or Vue') },
+    ];
+
+    return html`
+      <div class="zg-config-panel" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="zg-config-header">
+          <span class="zg-config-title">${tabs.find(t => t.id === tab)?.label || 'Config'}</span>
+          <button class="zg-config-close" @click=${() => { this._configOpen = false; }}>${this._iconHtml('close')}</button>
+        </div>
+
+        <div class="zg-config-tabs">
+          ${tabs.map(t => html`
+            <button class="zg-config-tab ${tab === t.id ? 'zg-config-tab--active' : ''}"
+                    @click=${() => { this._configTab = t.id; }}
+                    title=${t.tooltip}>${this._iconHtml(t.icon)}</button>
+          `)}
+        </div>
+
+        <div class="zg-config-body">
+          ${tab === 'features' ? this._renderConfigFeatures() : nothing}
+          ${tab === 'pivot' ? this._renderConfigPivot() : nothing}
+          ${tab === 'groups' ? this._renderConfigGroups() : nothing}
+          ${tab === 'appearance' ? this._renderConfigAppearance() : nothing}
+          ${tab === 'code' ? this._renderConfigCode() : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── Tab: Features ──────────────────────────────────
+  private _renderConfigFeatures() {
+    return html`
+      <div class="zg-config-section">${this._t('Funciones', 'Features')}</div>
+      ${this._renderConfigSwitch(this._t('Filtros en headers', 'Header filters'), this.enableHeaderFilters, v => { this.enableHeaderFilters = v; }, this._t('Inputs de filtro debajo de cada columna', 'Filter inputs below each column header'))}
+      ${this._renderConfigSwitch(this._t('Fila de totales', 'Totals row'), this.showTotals, v => { this.showTotals = v; }, this._t('Muestra totales al final', 'Shows totals at the bottom'))}
+      ${this._renderConfigSwitch(this._t('Portapapeles (Ctrl+C)', 'Clipboard (Ctrl+C)'), this.enableClipboard, v => { this.enableClipboard = v; }, this._t('Copiar datos', 'Copy data'))}
+      ${this._renderConfigSwitch(this._t('Menu contextual', 'Context menu'), this.enableContextMenu, v => { this.enableContextMenu = v; }, this._t('Click derecho sobre celdas', 'Right-click on cells'))}
+      ${this._renderConfigSwitch(this._t('Barra de estado', 'Status bar'), this.enableStatusBar, v => { this.enableStatusBar = v; }, this._t('Conteo y agregaciones en footer', 'Count and aggregations in footer'))}
+      ${this._renderConfigSwitch(this._t('Maestro-detalle', 'Master-detail'), this.enableMasterDetail, v => { this.enableMasterDetail = v; }, this._t('Expandir filas', 'Expand rows'))}
+      ${this._renderConfigSwitch(this._t('Importar datos', 'Import data'), this.enableImport, v => { this.enableImport = v; }, this._t('Excel, CSV o JSON', 'Excel, CSV or JSON'))}
+      ${this._renderConfigSwitch(this._t('Seleccion de filas', 'Row selection'), this.enableRowSelection, v => { this.enableRowSelection = v; }, this._t('Checkboxes para seleccionar', 'Checkboxes to select'))}
+      ${this._renderConfigSwitch(this._t('Edicion en linea', 'Inline editing'), this.enableEditing, v => { this.enableEditing = v; }, this._t('Click en celda para editar (tipo Excel)', 'Click cell to edit (Excel-like)'))}
+      ${this._renderConfigSwitch(this._t('Menu de columna', 'Column menu'), this.enableHeaderMenu, v => { this.enableHeaderMenu = v; }, this._t('Menu de 3 puntos en headers', 'Three-dot menu on headers'))}
+      ${this._renderConfigSwitch(this._t('Arrastrar filas', 'Drag & drop'), this.enableDragDrop, v => { this.enableDragDrop = v; }, this._t('Reordenar filas arrastrando', 'Reorder rows by dragging'))}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">v0.2</div>
+      ${this._renderConfigSwitch(this._t('Virtual Scroll (100K+)', 'Virtual Scroll (100K+)'), this.enableVirtualScroll, v => { this.enableVirtualScroll = v; }, this._t('Renderiza solo filas visibles', 'Renders only visible rows'))}
+      ${this._renderConfigSwitch(this._t('Deshacer/Rehacer', 'Undo/Redo'), this.enableUndoRedo, v => { this.enableUndoRedo = v; }, 'Ctrl+Z / Ctrl+Y')}
+      ${this._renderConfigSwitch(this._t('Seleccion de rango', 'Range Selection'), this.enableRangeSelection, v => { this.enableRangeSelection = v; }, this._t('Seleccion tipo Excel con Shift+Click', 'Excel-like selection with Shift+Click'))}
+      ${this._renderConfigSwitch(this._t('Pegar desde Excel', 'Paste from Excel'), this.enablePaste, v => { this.enablePaste = v; }, 'Ctrl+V')}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">${this._t('Barra de herramientas', 'Toolbar')}</div>
+      ${this._renderConfigSwitch(this._t('Mostrar toolbar', 'Show toolbar'), this.enableToolbar, v => { this.enableToolbar = v; }, this._t('Barra superior con busqueda y botones', 'Top bar with search and buttons'))}
+      ${this.enableToolbar ? html`
+        ${this._renderConfigSwitch(this._t('Busqueda rapida', 'Quick search'), this.showToolbarSearch, v => { this.showToolbarSearch = v; }, this._t('Campo de busqueda global', 'Global search field'))}
+        ${this._renderConfigSwitch(this._t('Selector de columnas', 'Column chooser'), this.showToolbarColumns, v => { this.showToolbarColumns = v; }, this._t('Ocultar/mostrar columnas', 'Hide/show columns'))}
+        ${this._renderConfigSwitch(this._t('Selector de densidad', 'Density picker'), this.showToolbarDensity, v => { this.showToolbarDensity = v; }, this._t('Compacto, normal, amplio', 'Compact, standard, comfortable'))}
+        ${this._renderConfigSwitch(this._t('Botones de exportar', 'Export buttons'), this.showToolbarExport, v => { this.showToolbarExport = v; }, this._t('CSV, Excel, JSON', 'CSV, Excel, JSON'))}
+        ${this._renderConfigSwitch(this._t('Boton de filtros', 'Filter button'), this.showToolbarFilter, v => { this.showToolbarFilter = v; }, this._t('Panel de filtros avanzados', 'Advanced filter panel'))}
+      ` : nothing}
+    `;
+  }
+
+  // ─── Tab: Pivot ──────────────────────────────────────
+  @state() private _codeFw: 'react' | 'html' | 'vue' = 'react';
+
+  private _ensurePivotConfig(): PivotConfig {
+    return this.pivotConfig ?? { rowField: '', columnField: '', valueField: '', aggregation: 'sum', showGrandTotals: true, showRowTotals: true };
+  }
+
+  private _updatePivot(partial: Partial<PivotConfig>) {
+    this.pivotConfig = { ...this._ensurePivotConfig(), ...partial };
+  }
+
+  private _renderConfigPivot() {
+    const textCols = this._textColumns;
+    const numCols = this._numericColumns;
+    const hasPivotData = numCols.length > 0 && textCols.length >= 2;
+    const aggLabels: Record<string, string> = { sum: this._t('Suma', 'Sum'), avg: this._t('Promedio', 'Avg'), count: this._t('Conteo', 'Count'), min: 'Min', max: 'Max' };
+    const pc = this._ensurePivotConfig();
+
+    return html`
+      <div class="zg-config-section">Pivot</div>
+      ${this._renderConfigSwitch(this._t('Modo Pivot', 'Pivot Mode'), this.enablePivot, v => {
+        this.enablePivot = v;
+        if (v && !this.pivotConfig) {
+          // Auto-initialize with best guess from columns
+          const textCols = this._textColumns;
+          const numCols = this._numericColumns;
+          if (textCols.length >= 2 && numCols.length >= 1) {
+            this.pivotConfig = {
+              rowField: textCols[0].field,
+              columnField: textCols[1].field,
+              valueField: numCols[0].field,
+              aggregation: 'sum',
+              showGrandTotals: true,
+              showRowTotals: true,
+            };
+          }
+        }
+      }, this._t('Transforma los datos en una tabla dinamica', 'Transform data into a dynamic pivot table'))}
+
+      ${this.enablePivot && hasPivotData ? html`
+        ${this._renderConfigSelect(this._t('Filas (eje Y)', 'Rows (Y axis)'),
+          pc.rowField,
+          textCols.map(c => ({ value: c.field, label: c.header || c.field })),
+          v => this._updatePivot({ rowField: v })
+        )}
+        <span class="zg-config-hint">${this._t('Cada valor unico sera una fila', 'Each unique value becomes a row')}</span>
+
+        ${this._renderConfigSelect(this._t('Columnas (eje X)', 'Columns (X axis)'),
+          pc.columnField,
+          textCols.map(c => ({ value: c.field, label: c.header || c.field })),
+          v => this._updatePivot({ columnField: v })
+        )}
+        <span class="zg-config-hint">${this._t('Cada valor unico genera una columna', 'Each unique value becomes a column')}</span>
+
+        <div class="zg-config-divider"></div>
+        <div class="zg-config-section">${this._t('Valores', 'Values')}</div>
+
+        <div class="zg-config-row">
+          ${this._renderConfigSelect(this._t('Campo', 'Field'),
+            pc.valueField,
+            numCols.map(c => ({ value: c.field, label: c.header || c.field })),
+            v => this._updatePivot({ valueField: v })
+          )}
+          ${this._renderConfigSelect('Fn',
+            pc.aggregation || 'sum',
+            [{ value: 'sum', label: this._t('Suma', 'Sum') }, { value: 'avg', label: this._t('Promedio', 'Avg') }, { value: 'count', label: this._t('Conteo', 'Count') }, { value: 'min', label: 'Min' }, { value: 'max', label: 'Max' }],
+            v => this._updatePivot({ aggregation: v as any })
+          )}
+        </div>
+
+        ${pc.valueField ? html`
+          <span class="zg-config-chip">
+            ${aggLabels[pc.aggregation || 'sum']}(${pc.valueField})
+            <button class="zg-config-chip-x" @click=${() => this._updatePivot({ valueField: '' })}>${this._iconHtml('close')}</button>
+          </span>
+        ` : nothing}
+
+        <div class="zg-config-divider"></div>
+        ${this._renderConfigSwitch(this._t('Gran Total', 'Grand Total'), pc.showGrandTotals ?? true, v => this._updatePivot({ showGrandTotals: v }))}
+        ${this._renderConfigSwitch(this._t('Total por fila', 'Row Total'), pc.showRowTotals ?? true, v => this._updatePivot({ showRowTotals: v }))}
+      ` : this.enablePivot && !hasPivotData ? html`
+        <span class="zg-config-hint">${this._t(
+          'No hay suficientes campos para pivot. Necesitas al menos 2 campos de texto y 1 numerico.',
+          'Not enough fields for pivot. Need at least 2 text fields and 1 numeric.'
+        )}</span>
+      ` : !this.enablePivot ? html`
+        <span class="zg-config-hint">${this._t(
+          'Activa Pivot Mode para crear una tabla dinamica.',
+          'Enable Pivot Mode to create a dynamic table.'
+        )}</span>
+      ` : nothing}
+    `;
+  }
+
+  // ─── Tab: Groups ─────────────────────────────────────
+  private _renderConfigGroups() {
+    const groupable = this._groupableColumns.length > 0 ? this._groupableColumns : this._textColumns;
+    return html`
+      <div class="zg-config-section">${this._t('Grupos', 'Groups')}</div>
+      ${this._renderConfigSwitch(this._t('Agrupar filas', 'Row Groups'), this.enableGrouping, v => { this.enableGrouping = v; if (!v) { this.groupField = ''; } }, this._t('Agrupa filas por un campo con subtotales', 'Group rows by a field with subtotals'))}
+
+      ${this.enableGrouping ? html`
+        <span class="zg-config-hint">${this._t('Agrupar filas por campo', 'Group rows by field')}</span>
+        ${this._renderConfigSelect(this._t('Agrupar por', 'Group by'),
+          this.groupField,
+          groupable.map(c => ({ value: c.field, label: c.header || c.field })),
+          v => { this.groupField = v; this._initGroups(); }
+        )}
+
+        ${this.groupField ? html`
+          <span class="zg-config-chip">
+            ${this.columns.find(c => c.field === this.groupField)?.header || this.groupField}
+            <button class="zg-config-chip-x" @click=${() => { this.groupField = ''; this.enableGrouping = false; }}>${this._iconHtml('close')}</button>
+          </span>
+        ` : nothing}
+
+        ${this._renderConfigSelect(this._t('Ordenar', 'Sort'),
+          this.groupSort || 'asc',
+          [{ value: 'asc', label: 'A → Z' }, { value: 'desc', label: 'Z → A' }],
+          v => { this.groupSort = v as any; }
+        )}
+
+        ${this._renderConfigSwitch(this._t('Subtotales', 'Subtotals'), this.groupSubtotals, v => { this.groupSubtotals = v; })}
+
+        <div class="zg-config-divider"></div>
+        ${this._renderConfigSwitch(this._t('Zona de arrastre', 'Drop zone'), this.enableGroupDropZone, v => { this.enableGroupDropZone = v; }, this._t('Arrastra columnas al panel para agrupar', 'Drag column headers to group'))}
+      ` : html`
+        <span class="zg-config-hint">${this._t(
+          'Activa Row Groups para agrupar filas por un campo.',
+          'Enable Row Groups to group rows by a field.'
+        )}</span>
+      `}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">${this._t('Fijar columnas (Pin)', 'Pin columns')}</div>
+      <span class="zg-config-hint">${this._t('Haz clic en los iconos para fijar a izquierda o derecha', 'Click icons to pin left or right')}</span>
+      ${this.columns.filter(c => !c.field.startsWith('__')).map(col => {
+        const leftPins = this.pinnedColumns?.left || [];
+        const rightPins = this.pinnedColumns?.right || [];
+        const isPinnedLeft = leftPins.includes(col.field);
+        const isPinnedRight = rightPins.includes(col.field);
+        return html`
+          <div class="zg-config-switch" style="padding:3px 0">
+            <button class="zg-config-close" style="font-size:12px;${isPinnedLeft ? 'color:var(--zg-primary)' : ''}"
+                    title="${this._t('Fijar izquierda', 'Pin left')}"
+                    @click=${() => {
+                      const lp = this.pinnedColumns?.left || [];
+                      const rp = this.pinnedColumns?.right || [];
+                      if (isPinnedLeft) {
+                        this.pinnedColumns = { left: lp.filter((f: string) => f !== col.field), right: rp };
+                      } else {
+                        this.pinnedColumns = { left: [...lp, col.field], right: rp.filter((f: string) => f !== col.field) };
+                      }
+                    }}>${this._iconHtml('pinLeft')}</button>
+            <span class="zg-config-switch-label" style="flex:1;font-size:12px">${col.header || col.field}</span>
+            <button class="zg-config-close" style="font-size:12px;${isPinnedRight ? 'color:var(--zg-primary)' : ''}"
+                    title="${this._t('Fijar derecha', 'Pin right')}"
+                    @click=${() => {
+                      const lp = this.pinnedColumns?.left || [];
+                      const rp = this.pinnedColumns?.right || [];
+                      if (isPinnedRight) {
+                        this.pinnedColumns = { left: lp, right: rp.filter((f: string) => f !== col.field) };
+                      } else {
+                        this.pinnedColumns = { left: lp.filter((f: string) => f !== col.field), right: [...rp, col.field] };
+                      }
+                    }}>${this._iconHtml('pinRight')}</button>
+          </div>
+        `;
+      })}
+    `;
+  }
+
+  // ─── Tab: Appearance ──────────────────────────────────
+  private _renderConfigAppearance() {
+    return html`
+      <div class="zg-config-section">${this._t('Apariencia', 'Appearance')}</div>
+      ${this._renderConfigSelect(this._t('Tema', 'Theme'), this.theme,
+        [{ value: 'light', label: this._t('Claro', 'Light') }, { value: 'dark', label: this._t('Oscuro', 'Dark') }, { value: 'zentto', label: 'Zentto' }],
+        v => { this.theme = v as any; },
+        this._t('Esquema de colores del grid', 'Grid color scheme')
+      )}
+
+      <div class="zg-config-section">${this._t('Densidad', 'Density')}</div>
+      <div style="display:flex;gap:4px">
+        ${(['compact', 'standard', 'comfortable'] as const).map(d => {
+          const labels: Record<string, string> = {
+            compact: this._t('Compacto', 'Compact'),
+            standard: this._t('Normal', 'Standard'),
+            comfortable: this._t('Amplio', 'Comfortable'),
+          };
+          const icons: Record<string, string> = {
+            compact: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+            standard: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="19" x2="21" y2="19"/></svg>',
+            comfortable: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="4" x2="21" y2="4"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="20" x2="21" y2="20"/></svg>',
+          };
+          return html`
+            <button class="zg-config-fw-tab ${this.density === d ? 'zg-config-fw-tab--active' : ''}"
+                    style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px"
+                    title=${labels[d]}
+                    @click=${() => { this.density = d; }}>
+              ${unsafeHTML(icons[d])}
+              <span style="font-size:9px">${labels[d]}</span>
+            </button>
+          `;
+        })}
+      </div>
+
+      <div class="zg-config-divider"></div>
+      ${this._renderConfigSelect(this._t('Idioma', 'Language'), this.locale,
+        [{ value: 'es', label: 'Español' }, { value: 'en', label: 'English' }],
+        v => { this.locale = v as any; },
+        this._t('Idioma de la interfaz', 'Interface language')
+      )}
+    `;
+  }
+
+  // ─── Tab: Code Generator ──────────────────────────────
+  private _renderConfigCode() {
+    const fw = this._codeFw;
+    const boolAttrs = [
+      this.showTotals && 'show-totals', this.enableHeaderFilters && 'enable-header-filters',
+      this.enableClipboard && 'enable-clipboard', this.enableFind && 'enable-find',
+      this.enableQuickSearch && 'enable-quick-search', this.enableContextMenu && 'enable-context-menu',
+      this.enableStatusBar && 'enable-status-bar', this.enableRowSelection && 'enable-row-selection',
+      this.enableMasterDetail && 'enable-master-detail', this.enableImport && 'enable-import',
+      this.enableGrouping && 'enable-grouping', this.enableGroupDropZone && 'enable-group-drop-zone',
+      this.enablePivot && 'enable-pivot',
+    ].filter(Boolean) as string[];
+
+    const code = fw === 'react' ? this._genReactCode(boolAttrs) : fw === 'vue' ? this._genVueCode(boolAttrs) : this._genHtmlCode(boolAttrs);
+
+    return html`
+      <div class="zg-config-fw-tabs">
+        <button class="zg-config-fw-tab ${fw === 'react' ? 'zg-config-fw-tab--active' : ''}" @click=${() => { this._codeFw = 'react'; }}>React</button>
+        <button class="zg-config-fw-tab ${fw === 'html' ? 'zg-config-fw-tab--active' : ''}" @click=${() => { this._codeFw = 'html'; }}>HTML</button>
+        <button class="zg-config-fw-tab ${fw === 'vue' ? 'zg-config-fw-tab--active' : ''}" @click=${() => { this._codeFw = 'vue'; }}>Vue</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+        <button class="zg-btn-icon" style="font-size:11px" @click=${() => navigator.clipboard.writeText(code)}>${this._iconHtml('copy')} <span style="font-size:10px">${this._t('Copiar', 'Copy')}</span></button>
+      </div>
+      <pre class="zg-config-code">${code}</pre>
+    `;
+  }
+
+  private _genReactCode(attrs: string[]): string {
+    return `// npm install @zentto/datagrid @zentto/datagrid-core
+"use client";
+import { useEffect, useRef } from "react";
+import "@zentto/datagrid";
+
+export default function MyGrid() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.columns = [/* your columns */];
+    el.rows = [/* your data */];${this.enableGrouping && this.groupField ? `\n    el.groupField = "${this.groupField}";` : ''}${this.enablePivot && this.pivotConfig?.rowField ? `\n    el.pivotConfig = ${JSON.stringify(this.pivotConfig)};` : ''}
+  }, []);
+
+  return (
+    <zentto-grid
+      ref={ref}
+      ${attrs.join('\n      ')}
+      theme="${this.theme}"
+      density="${this.density}"
+      locale="${this.locale}"
+      height="500px"
+    />
+  );
+}`;
+  }
+
+  private _genHtmlCode(attrs: string[]): string {
+    return `<!-- npm install @zentto/datagrid -->
+<zentto-grid
+  ${attrs.join('\n  ')}
+  theme="${this.theme}"
+  density="${this.density}"
+  locale="${this.locale}"
+  height="500px"
+></zentto-grid>
+
+<script type="module">
+  import "@zentto/datagrid";
+  const grid = document.querySelector("zentto-grid");
+  grid.columns = [/* your columns */];
+  grid.rows = [/* your data */];${this.enablePivot && this.pivotConfig?.rowField ? `\n  grid.pivotConfig = ${JSON.stringify(this.pivotConfig)};` : ''}
+</script>`;
+  }
+
+  private _genVueCode(attrs: string[]): string {
+    return `<!-- npm install @zentto/datagrid @zentto/datagrid-core -->
+<script setup>
+import { ref, onMounted } from "vue";
+import "@zentto/datagrid";
+
+const gridRef = ref(null);
+
+onMounted(() => {
+  const el = gridRef.value;
+  el.columns = [/* your columns */];
+  el.rows = [/* your data */];${this.enablePivot && this.pivotConfig?.rowField ? `\n  el.pivotConfig = ${JSON.stringify(this.pivotConfig)};` : ''}
+});
+</script>
+
+<template>
+  <zentto-grid
+    ref="gridRef"
+    ${attrs.join('\n    ')}
+    theme="${this.theme}"
+    density="${this.density}"
+    locale="${this.locale}"
+    height="500px"
+  />
+</template>`;
+  }
+
   // ─── Rich Toolbar ─────────────────────────────────────────────
 
   private _renderToolbar(totalRows: number) {
@@ -1865,7 +2889,7 @@ export class ZenttoGrid extends LitElement {
           ${selCount > 0 ? html`<span class="zg-selection-info">${selCount} ${this._t('seleccionadas', 'selected')}</span>` : nothing}
 
           <!-- Quick Search (global filter) -->
-          ${this.enableQuickSearch ? html`
+          ${this.enableQuickSearch && this.showToolbarSearch ? html`
             <input type="text" class="zg-find-input" style="width:180px;margin-left:8px"
               placeholder="${this._t('Buscar en tabla...', 'Search table...')}"
               .value=${this._quickSearch}
@@ -1873,7 +2897,7 @@ export class ZenttoGrid extends LitElement {
           ` : nothing}
 
           <!-- Filter Panel toggle -->
-          ${this.filterPanel.length > 0 ? html`
+          ${this.filterPanel.length > 0 && this.showToolbarFilter ? html`
             <button class="zg-btn-icon ${this._showFilterPanel ? 'zg-btn-icon--active' : ''}"
                     @click=${(e: Event) => { e.stopPropagation(); this._showFilterPanel = !this._showFilterPanel; }}
                     title="${this._t('Filtros', 'Filters')}">
@@ -1898,7 +2922,7 @@ export class ZenttoGrid extends LitElement {
           <span class="zg-toolbar-sep"></span>
 
           <!-- Columns chooser -->
-          <div class="zg-toolbar-dropdown" @click=${(e: Event) => e.stopPropagation()}>
+          ${this.showToolbarColumns ? html`<div class="zg-toolbar-dropdown" @click=${(e: Event) => e.stopPropagation()}>
             <button class="zg-btn-icon ${this._showColumnsPanel ? 'zg-btn-icon--active' : ''}"
                     @click=${() => this._togglePanel('columns')}
                     title="${this._t('Columnas', 'Columns')}">${this._iconHtml('columns')}</button>
@@ -1918,10 +2942,10 @@ export class ZenttoGrid extends LitElement {
                 `)}
               </div>
             ` : nothing}
-          </div>
+          </div>` : nothing}
 
           <!-- Density picker -->
-          <div class="zg-toolbar-dropdown" @click=${(e: Event) => e.stopPropagation()}>
+          ${this.showToolbarDensity ? html`<div class="zg-toolbar-dropdown" @click=${(e: Event) => e.stopPropagation()}>
             <button class="zg-btn-icon ${this._showDensityPanel ? 'zg-btn-icon--active' : ''}"
                     @click=${() => this._togglePanel('density')}
                     title="${this._t('Densidad', 'Density')}">${this._iconHtml('density')}</button>
@@ -1944,12 +2968,14 @@ export class ZenttoGrid extends LitElement {
                 </div>
               </div>
             ` : nothing}
-          </div>
+          </div>` : nothing}
 
-          <!-- Export buttons (inline) -->
-          <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV">${this._iconHtml('export')} <span style="font-size:11px;font-weight:600">CSV</span></button>
-          <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel">${this._iconHtml('export')} <span style="font-size:11px;font-weight:600;color:var(--zg-success,#0d9668)">Excel</span></button>
-          <button class="zg-btn-icon" @click=${this._exportJson} title="JSON">${this._iconHtml('export')} <span style="font-size:11px;font-weight:600">JSON</span></button>
+          <!-- Export buttons (inline, each with distinct icon) -->
+          ${this.showToolbarExport ? html`
+            <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV">${this._iconHtml('exportCsv')} <span style="font-size:11px;font-weight:600">CSV</span></button>
+            <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel" style="color:var(--zg-success,#0d9668)">${this._iconHtml('exportExcel')} <span style="font-size:11px;font-weight:600">Excel</span></button>
+            <button class="zg-btn-icon" @click=${this._exportJson} title="JSON" style="color:var(--zg-warning,#e67e22)">${this._iconHtml('exportJson')} <span style="font-size:11px;font-weight:600">JSON</span></button>
+          ` : nothing}
 
           <!-- Import button (available when enableImport or enableEditing) -->
           ${this.enableImport || this.enableEditing ? html`
@@ -1959,9 +2985,22 @@ export class ZenttoGrid extends LitElement {
                    style="display:none" />
           ` : nothing}
 
-          <!-- Settings button (emits settings-click event) -->
-          ${this.enableSettings ? html`
-            <button class="zg-btn-icon" @click=${() => this._dispatchGridEvent('settings-click', {})}
+          <!-- Undo/Redo buttons -->
+          ${this.enableUndoRedo ? html`
+            <span class="zg-toolbar-sep"></span>
+            <button class="zg-btn-icon" @click=${() => this.undo()} ?disabled=${!this._undoRedoStack.canUndo}
+                    title="${this._t('Deshacer', 'Undo')} (Ctrl+Z)" aria-label="${this._t('Deshacer', 'Undo')}">
+              ${unsafeHTML(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`)}
+            </button>
+            <button class="zg-btn-icon" @click=${() => this.redo()} ?disabled=${!this._undoRedoStack.canRedo}
+                    title="${this._t('Rehacer', 'Redo')} (Ctrl+Y)" aria-label="${this._t('Rehacer', 'Redo')}">
+              ${unsafeHTML(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`)}
+            </button>
+          ` : nothing}
+
+          <!-- Settings / Configurator toggle -->
+          ${this.enableConfigurator || this.enableSettings ? html`
+            <button class="zg-btn-icon ${this._configOpen ? 'zg-btn-icon--active' : ''}" @click=${() => this._toggleConfig()}
                     title="${this._t('Configuracion', 'Settings')}">${this._iconHtml('settings')}</button>
           ` : nothing}
         </div>
