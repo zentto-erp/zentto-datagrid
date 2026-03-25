@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZenttoDataGrid — Free Enterprise Data Grid</title>
+  <meta name="description" content="100+ features. Free. Open-source. React, Vue, Angular, or vanilla HTML. The AG Grid alternative you've been looking for.">
+  <link rel="icon" href="https://zentto.net/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand: #e67e22;
+      --brand-dark: #d35400;
+      --bg: #ffffff;
+      --bg-alt: #f8f9fa;
+      --text: #1c1e21;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --code-bg: #f1f3f5;
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+    pre { background: #1e1e2e; color: #cdd6f4; padding: 20px; border-radius: 10px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+    pre code { background: transparent; padding: 0; color: inherit; }
+
+    /* Layout */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+    section:nth-child(even) { background: var(--bg-alt); }
+
+    /* Hero */
+    .hero { text-align: center; padding: 100px 0 80px; background: linear-gradient(135deg, #fff8f0 0%, #fff 100%); }
+    .hero-logo { width: 72px; margin-bottom: 16px; }
+    .hero h1 { font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 12px; }
+    .hero h1 span { color: var(--brand); }
+    .hero p { font-size: 1.2rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 32px; }
+    .hero-badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px; }
+    .hero-badges img { height: 22px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 15px; transition: all 0.2s; border: none; cursor: pointer; }
+    .btn-primary { background: var(--brand); color: #fff; }
+    .btn-primary:hover { background: var(--brand-dark); text-decoration: none; }
+    .btn-outline { border: 2px solid var(--border); background: #fff; color: var(--text); }
+    .btn-outline:hover { border-color: var(--brand); color: var(--brand); text-decoration: none; }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .hero-install { margin-top: 24px; display: inline-flex; align-items: center; gap: 10px; background: #1e1e2e; color: #cdd6f4; padding: 10px 20px; border-radius: 8px; font-family: monospace; font-size: 14px; }
+    .hero-install .dollar { color: #6b7280; }
+
+    /* Features grid */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+    .feature-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--card-shadow); }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
+    .feature-icon { width: 32px; height: 32px; background: rgba(230,126,34,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+
+    /* Comparison table */
+    .comparison { overflow-x: auto; }
+    .comparison table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .comparison th, .comparison td { padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .comparison th { font-weight: 600; background: var(--bg-alt); }
+    .comparison td:not(:first-child) { text-align: center; }
+    .check { color: #0d9668; font-weight: 700; }
+    .cross { color: #ccc; }
+
+    /* Demo section */
+    .demo-section { background: var(--bg-alt); }
+    .demo-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .demo-header h2 { font-size: 1.5rem; }
+    .demo-toggle { display: flex; gap: 4px; background: var(--border); border-radius: 8px; padding: 3px; }
+    .demo-toggle button { padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; background: transparent; color: var(--text-muted); transition: all 0.2s; }
+    .demo-toggle button.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    /* Packages */
+    .pkg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 24px; }
+    .pkg-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+    .pkg-card code { font-size: 14px; font-weight: 600; }
+    .pkg-card p { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+    /* Section headers */
+    .section-header { text-align: center; margin-bottom: 48px; }
+    .section-header h2 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
+    .section-header p { color: var(--text-muted); font-size: 1.05rem; margin-top: 8px; }
+
+    /* Quick start tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .tab { padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; background: #fff; transition: all 0.15s; }
+    .tab.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Footer */
+    footer { padding: 40px 0; text-align: center; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 14px; }
+    footer a { color: var(--brand); }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2rem; }
+      .hero p { font-size: 1rem; }
+      section { padding: 48px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <img src="https://zentto.net/favicon.svg" alt="Zentto" class="hero-logo">
+      <h1><span>Zentto</span>DataGrid</h1>
+      <p>The free, open-source data grid with 100+ enterprise features. React, Vue, Angular, or vanilla HTML.</p>
+      <div class="hero-badges">
+        <img src="https://img.shields.io/npm/v/@zentto/datagrid.svg?color=orange&label=npm" alt="npm">
+        <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
+        <img src="https://img.shields.io/bundlephobia/minzip/@zentto/datagrid?label=gzip" alt="size">
+        <img src="https://img.shields.io/badge/frameworks-React%20%7C%20Vue%20%7C%20Angular%20%7C%20HTML-brightgreen" alt="frameworks">
+      </div>
+      <div class="hero-actions">
+        <a href="https://github.com/zentto-erp/zentto-datagrid" class="btn btn-primary">GitHub</a>
+        <a href="#demo" class="btn btn-outline">Live Demo</a>
+        <a href="https://www.npmjs.com/package/@zentto/datagrid" class="btn btn-outline">npm</a>
+      </div>
+      <div class="hero-install"><span class="dollar">$</span> npm install @zentto/datagrid</div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section>
+    <div class="container">
+      <div class="section-header">
+        <h2>Enterprise Features. Zero Cost.</h2>
+        <p>Everything AG Grid Enterprise charges $999/dev/yr for — shipped free under MIT.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F50D;</span> Sort, Filter, Search</h3><p>Multi-column sort, 14 filter operators, header filters, full-text search with Ctrl+F.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F4CA;</span> Pivot Tables</h3><p>Row groups, column groups, value aggregation, grand totals — interactive pivot configurator.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x26A1;</span> Virtual Scroll</h3><p>100K+ rows without lag. Renders only visible rows with configurable overscan.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F4C8;</span> Sparklines</h3><p>Line, bar, and area mini-charts inside cells. SVG-based, trend detection.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x21A9;</span> Undo / Redo</h3><p>Full edit history with Ctrl+Z/Y. Cell edits, row add/delete, paste — all reversible.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F4CB;</span> Range Selection</h3><p>Excel-like click+drag range selection. Copy range with Ctrl+C, paste with Ctrl+V.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x270F;</span> Inline CRUD</h3><p>Double-click to edit. Auto REST API integration. Add, delete, import from Excel/CSV/JSON.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F9EE;</span> Formula Engine</h3><p>SUM, AVG, IF, ROUND — Excel-like formulas per row, defined declaratively as props.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F3A8;</span> Rich Templates</h3><p>Status chips, avatars, progress bars, ratings, flags, links, thumbnails, currency.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x1F310;</span> Framework Agnostic</h3><p>Web component works everywhere. Official wrappers for React, Vue 3, and Angular 17+.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x2699;</span> Built-in Configurator</h3><p>Toggle features, pivot, groups, themes — all from an interactive side panel.</p></div>
+        <div class="feature-card"><h3><span class="feature-icon">&#x267F;</span> Accessible</h3><p>ARIA roles, keyboard navigation, screen reader support, focus-visible outlines.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section>
+    <div class="container">
+      <div class="section-header">
+        <h2>How We Compare</h2>
+      </div>
+      <div class="comparison">
+        <table>
+          <thead>
+            <tr><th>Feature</th><th>ZenttoDataGrid</th><th>MUI X Premium<br><small>$180/dev/yr</small></th><th>AG Grid Enterprise<br><small>$999/dev/yr</small></th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Price</td><td><strong style="color:var(--brand)">FREE (MIT)</strong></td><td>$180/dev/yr</td><td>$999/dev/yr</td></tr>
+            <tr><td>Pivot Tables</td><td class="check">&#10003;</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Row Grouping</td><td class="check">&#10003;</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Virtual Scroll (100K+)</td><td class="check">&#10003;</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Sparklines</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Undo/Redo</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Range Selection</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Paste from Excel</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Formula Engine</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+            <tr><td>Vue + Angular Wrappers</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="check">&#10003;</td></tr>
+            <tr><td>Web Component</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+            <tr><td>Bundle (gzip)</td><td><strong>~18 KB</strong></td><td>~200 KB</td><td>~300 KB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Demo -->
+  <section class="demo-section" id="demo">
+    <div class="container">
+      <div class="demo-header">
+        <h2>Live Demo</h2>
+        <div class="demo-toggle">
+          <button class="active" onclick="setTheme('light',this)">Light</button>
+          <button onclick="setTheme('dark',this)">Dark</button>
+          <button onclick="setTheme('zentto',this)">Zentto</button>
+        </div>
+      </div>
+      <zentto-grid id="demo-grid"
+        enable-toolbar
+        enable-header-menu
+        enable-context-menu
+        enable-row-selection
+        enable-find
+        enable-clipboard
+        enable-status-bar
+        enable-grouping
+        enable-group-drop-zone
+        show-totals
+        enable-configurator
+        enable-undo-redo
+        enable-range-selection
+        enable-paste
+        enable-editing
+        locale="en"
+        height="520px"
+        theme="light"
+      ></zentto-grid>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section>
+    <div class="container">
+      <div class="section-header">
+        <h2>Quick Start</h2>
+        <p>Get up and running in under 2 minutes.</p>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('html',this)">HTML</button>
+        <button class="tab" onclick="showTab('react',this)">React</button>
+        <button class="tab" onclick="showTab('vue',this)">Vue 3</button>
+        <button class="tab" onclick="showTab('angular',this)">Angular</button>
+      </div>
+      <div id="tab-html" class="tab-content active">
+<pre><code>&lt;script type="module"&gt;
+  import 'https://unpkg.com/@zentto/datagrid@latest/dist/zentto-grid.js';
+&lt;/script&gt;
+
+&lt;zentto-grid
+  columns='[{"field":"name","header":"Name","sortable":true},
+            {"field":"price","header":"Price","type":"number","currency":"USD"}]'
+  rows='[{"name":"Widget","price":9.99},{"name":"Gadget","price":24.50}]'
+  show-totals enable-toolbar enable-clipboard
+&gt;&lt;/zentto-grid&gt;</code></pre>
+      </div>
+      <div id="tab-react" class="tab-content">
+<pre><code>npm install @zentto/datagrid-react</code></pre>
+<pre><code>import { ZenttoDataGrid } from '@zentto/datagrid-react';
+
+export default function App() {
+  return (
+    &lt;ZenttoDataGrid
+      columns={[
+        { field: 'name', header: 'Name', sortable: true },
+        { field: 'price', header: 'Price', type: 'number', currency: 'USD' },
+      ]}
+      rows={data}
+      showTotals enableToolbar enableClipboard
+      onRowClick={(e) =&gt; console.log(e.detail.row)}
+    /&gt;
+  );
+}</code></pre>
+      </div>
+      <div id="tab-vue" class="tab-content">
+<pre><code>npm install @zentto/datagrid-vue</code></pre>
+<pre><code>&lt;template&gt;
+  &lt;ZenttoDataGrid :columns="columns" :rows="rows"
+    show-totals enable-toolbar @row-click="onRowClick" /&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+import { ZenttoDataGrid } from '@zentto/datagrid-vue';
+const columns = [{ field: 'name', header: 'Name', sortable: true }];
+const rows = [{ name: 'Widget', price: 9.99 }];
+&lt;/script&gt;</code></pre>
+      </div>
+      <div id="tab-angular" class="tab-content">
+<pre><code>npm install @zentto/datagrid-angular</code></pre>
+<pre><code>import { ZenttoDataGridComponent, ZENTTO_GRID_SCHEMA } from '@zentto/datagrid-angular';
+
+@Component({
+  standalone: true,
+  imports: [ZenttoDataGridComponent],
+  schemas: [ZENTTO_GRID_SCHEMA],
+  template: `&lt;zentto-data-grid [columns]="columns" [rows]="rows"
+    [showTotals]="true" (rowClick)="onClick($event)"&gt;&lt;/zentto-data-grid&gt;`
+})
+export class MyComponent { ... }</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Packages -->
+  <section>
+    <div class="container">
+      <div class="section-header">
+        <h2>Packages</h2>
+        <p>Monorepo with 5 packages — install only what you need.</p>
+      </div>
+      <div class="pkg-grid">
+        <a href="https://www.npmjs.com/package/@zentto/datagrid-core" class="pkg-card"><code>@zentto/datagrid-core</code><p>Pure logic engine. Zero deps.</p></a>
+        <a href="https://www.npmjs.com/package/@zentto/datagrid" class="pkg-card"><code>@zentto/datagrid</code><p>Web component (Lit)</p></a>
+        <a href="https://www.npmjs.com/package/@zentto/datagrid-react" class="pkg-card"><code>@zentto/datagrid-react</code><p>React wrapper</p></a>
+        <a href="https://www.npmjs.com/package/@zentto/datagrid-vue" class="pkg-card"><code>@zentto/datagrid-vue</code><p>Vue 3 wrapper</p></a>
+        <a href="https://www.npmjs.com/package/@zentto/datagrid-angular" class="pkg-card"><code>@zentto/datagrid-angular</code><p>Angular 17+ wrapper</p></a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>MIT License &mdash; Built by <a href="https://zentto.net">Zentto</a> &mdash; <a href="https://github.com/zentto-erp/zentto-datagrid">GitHub</a></p>
+    </div>
+  </footer>
+
+  <!-- Load ZenttoDataGrid from CDN -->
+  <script type="module">
+    import 'https://unpkg.com/@zentto/datagrid@latest/dist/zentto-grid.js';
+
+    const grid = document.getElementById('demo-grid');
+
+    grid.columns = [
+      { field: 'id', header: '#', width: 60, sortable: true },
+      { field: 'product', header: 'Product', sortable: true, groupable: true },
+      { field: 'category', header: 'Category', sortable: true, groupable: true,
+        statusColors: { 'Electronics': 'info', 'Clothing': 'success', 'Food': 'warning', 'Books': 'default' }, statusVariant: 'filled' },
+      { field: 'price', header: 'Price', type: 'number', currency: 'USD', sortable: true, aggregation: 'sum' },
+      { field: 'stock', header: 'Stock', type: 'number', sortable: true, aggregation: 'sum' },
+      { field: 'rating', header: 'Rating', ratingMax: 5 },
+      { field: 'trend', header: 'Trend', sparkline: 'line', width: 120 },
+      { field: 'progress', header: 'Sales %', progressMax: 100 },
+    ];
+
+    const categories = ['Electronics', 'Clothing', 'Food', 'Books'];
+    const products = ['Laptop', 'T-Shirt', 'Headphones', 'Coffee', 'Novel', 'Tablet', 'Sneakers', 'Cheese', 'Monitor', 'Jacket',
+      'Keyboard', 'Bread', 'Camera', 'Pants', 'Tea', 'Speaker', 'Hat', 'Butter', 'Mouse', 'Scarf'];
+
+    const rows = [];
+    for (let i = 1; i <= 200; i++) {
+      rows.push({
+        id: i,
+        product: products[(i - 1) % products.length] + ' ' + Math.ceil(i / 20),
+        category: categories[i % categories.length],
+        price: Math.round((Math.random() * 500 + 5) * 100) / 100,
+        stock: Math.floor(Math.random() * 1000),
+        rating: Math.floor(Math.random() * 5) + 1,
+        trend: Array.from({ length: 12 }, () => Math.floor(Math.random() * 100)),
+        progress: Math.floor(Math.random() * 100),
+      });
+    }
+    grid.rows = rows;
+    grid.groupField = 'category';
+    grid.groupSubtotals = true;
+  </script>
+
+  <script>
+    function setTheme(theme, btn) {
+      document.getElementById('demo-grid').setAttribute('theme', theme);
+      document.querySelectorAll('.demo-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+    function showTab(id, btn) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active');
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>
