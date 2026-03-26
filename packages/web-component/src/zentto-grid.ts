@@ -92,6 +92,11 @@ export class ZenttoGrid extends LitElement {
   @property({ type: String }) density: 'compact' | 'standard' | 'comfortable' = 'compact';
   @property({ type: String }) height = '500px';
 
+  // ─── View Mode (table, form, cards, kanban) ─────────────────
+  @property({ type: String, attribute: 'view-mode' }) viewMode: 'table' | 'form' | 'cards' | 'kanban' = 'table';
+  /** Field to group by in Kanban view (must be a status/category field) */
+  @property({ type: String, attribute: 'kanban-field' }) kanbanField = '';
+
   // ─── Toolbar ─────────────────────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-toolbar' }) enableToolbar = true;
   @property({ type: Boolean, attribute: 'show-toolbar-search' }) showToolbarSearch = true;
@@ -187,6 +192,12 @@ export class ZenttoGrid extends LitElement {
       exportCsv:  s('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
       exportExcel:s('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/>'),
       exportJson: s('<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 1 2 2 2 2 0 0 1-2 2v5a2 2 0 0 1-2 2h-1"/>'),
+      viewTable:  s('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>'),
+      viewForm:   s('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="7" x2="17" y2="7"/><line x1="9" y1="12" x2="17" y2="12"/><line x1="9" y1="17" x2="17" y2="17"/><circle cx="6" cy="7" r="0.5" fill="currentColor"/><circle cx="6" cy="12" r="0.5" fill="currentColor"/><circle cx="6" cy="17" r="0.5" fill="currentColor"/>'),
+      viewCards:  s('<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+      viewKanban: s('<rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/>'),
+      chevronLeft: s('<polyline points="15 18 9 12 15 6"/>'),
+      chevronRight:s('<polyline points="9 18 15 12 9 6"/>'),
     };
     const iconStr = this.icons[name] ?? defaults[name] ?? '';
     return iconStr;
@@ -247,6 +258,7 @@ export class ZenttoGrid extends LitElement {
 
   // Configurator panel state
   @state() private _configOpen = false;
+  @state() private _formIndex = 0; // Current record index in form view
   @state() private _configTab: 'features' | 'pivot' | 'groups' | 'appearance' | 'code' = 'features';
 
   // Context Menu state
@@ -2166,8 +2178,13 @@ export class ZenttoGrid extends LitElement {
         <div class="zg-config-wrapper">
         <div class="zg-config-main">
 
-        <!-- Table -->
-        <div class="zg-table-wrapper ${this.enableVirtualScroll ? 'zg-virtual-scroll' : ''}"
+        <!-- Content: switches by viewMode -->
+        ${this.viewMode === 'form' ? this._renderFormView() : nothing}
+        ${this.viewMode === 'cards' ? this._renderCardsView() : nothing}
+        ${this.viewMode === 'kanban' ? this._renderKanbanView() : nothing}
+
+        <!-- Table (default view) -->
+        ${this.viewMode === 'table' ? html`<div class="zg-table-wrapper ${this.enableVirtualScroll ? 'zg-virtual-scroll' : ''}"
              @scroll=${this.enableVirtualScroll ? (e: Event) => this._handleVirtualScroll(e) : nothing}>
           ${this.enableVirtualScroll && this._virtualScrollResult ? html`
             <div class="zg-virtual-spacer" style="height:${this._virtualScrollResult.totalHeight}px"></div>
@@ -2377,7 +2394,7 @@ export class ZenttoGrid extends LitElement {
               })}
             </tbody>
           </table>
-        </div>
+        </div>` : nothing}
 
         <!-- Cell Context Menu -->
         ${this._contextMenu ? html`
@@ -2931,6 +2948,113 @@ onMounted(() => {
 </template>`;
   }
 
+  // ─── View: Form (one record at a time) ─────────────────────────
+
+  private _renderFormView() {
+    const dataRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const row = dataRows[this._formIndex];
+    if (!row) return html`<div style="padding:20px;text-align:center;color:var(--zg-text-muted)">${this._t('Sin datos', 'No data')}</div>`;
+    const cols = this._visibleColumns;
+
+    return html`
+      <div class="zg-table-wrapper" style="padding:16px;overflow:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--zg-border)">
+          <button class="zg-btn" @click=${() => { if (this._formIndex > 0) this._formIndex--; }} ?disabled=${this._formIndex === 0}>${this._iconHtml('chevronLeft')} ${this._t('Anterior', 'Previous')}</button>
+          <span style="font-size:13px;font-weight:600;color:var(--zg-text-secondary)">${this._formIndex + 1} / ${dataRows.length}</span>
+          <button class="zg-btn" @click=${() => { if (this._formIndex < dataRows.length - 1) this._formIndex++; }} ?disabled=${this._formIndex >= dataRows.length - 1}>${this._t('Siguiente', 'Next')} ${this._iconHtml('chevronRight')}</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+          ${cols.map(col => {
+            const val = row[col.field];
+            return html`
+              <div style="display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:var(--zg-radius);border:1px solid var(--zg-border)">
+                <span style="font-size:10px;font-weight:600;color:var(--zg-text-muted);text-transform:uppercase;letter-spacing:0.05em">${col.header || col.field}</span>
+                <span style="font-size:13px;color:var(--zg-text)">${this._renderCellContent(val, col, row)}</span>
+              </div>
+            `;
+          })}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── View: Cards (grid of cards) ──────────────────────────────
+
+  private _renderCardsView() {
+    const dataRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const cols = this._visibleColumns.slice(0, 6); // Show max 6 fields per card
+    const titleCol = cols[0];
+    const subtitleCol = cols[1];
+
+    return html`
+      <div class="zg-table-wrapper" style="padding:12px;overflow:auto">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+          ${dataRows.map((row, idx) => html`
+            <div style="border:1px solid var(--zg-border);border-radius:var(--zg-radius-lg);padding:12px;background:var(--zg-bg);cursor:pointer;transition:box-shadow 0.15s"
+                 @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: idx })}
+                 @mouseenter=${(e: Event) => (e.target as HTMLElement).style.boxShadow = 'var(--zg-shadow-md)'}
+                 @mouseleave=${(e: Event) => (e.target as HTMLElement).style.boxShadow = 'none'}>
+              ${titleCol ? html`<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--zg-text)">${this._renderCellContent(row[titleCol.field], titleCol, row)}</div>` : nothing}
+              ${subtitleCol ? html`<div style="font-size:12px;color:var(--zg-text-secondary);margin-bottom:8px">${this._renderCellContent(row[subtitleCol.field], subtitleCol, row)}</div>` : nothing}
+              ${cols.slice(2).map(col => html`
+                <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--zg-border)">
+                  <span style="color:var(--zg-text-muted)">${col.header || col.field}</span>
+                  <span style="color:var(--zg-text);font-weight:500">${this._renderCellContent(row[col.field], col, row)}</span>
+                </div>
+              `)}
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── View: Kanban (columns by status) ─────────────────────────
+
+  private _renderKanbanView() {
+    const dataRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const field = this.kanbanField || this.columns.find(c => c.statusColors)?.field || '';
+    if (!field) return html`<div style="padding:20px;text-align:center;color:var(--zg-text-muted)">${this._t('Selecciona un campo para Kanban', 'Select a field for Kanban')}</div>`;
+
+    const col = this.columns.find(c => c.field === field);
+    const groups = new Map<string, typeof dataRows>();
+    for (const row of dataRows) {
+      const key = String(row[field] ?? '');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+
+    const titleCol = this._visibleColumns.find(c => c.field !== field && c.type !== 'number');
+    const valueCol = this._visibleColumns.find(c => c.type === 'number' || c.currency);
+
+    return html`
+      <div class="zg-table-wrapper" style="padding:12px;overflow-x:auto;overflow-y:auto">
+        <div style="display:flex;gap:10px;min-width:max-content">
+          ${[...groups.entries()].map(([key, rows]) => {
+            const statusColor = col?.statusColors?.[key] || 'default';
+            return html`
+              <div style="min-width:220px;max-width:280px;flex:1;background:var(--zg-surface);border-radius:var(--zg-radius-lg);border:1px solid var(--zg-border);display:flex;flex-direction:column">
+                <div style="padding:8px 12px;font-weight:700;font-size:12px;border-bottom:1px solid var(--zg-border);display:flex;align-items:center;gap:6px">
+                  <span class="zg-chip zg-chip--${statusColor} zg-chip--filled" style="font-size:10px;height:18px">${key || this._t('Sin estado', 'No status')}</span>
+                  <span style="color:var(--zg-text-muted);font-size:11px">${rows.length}</span>
+                </div>
+                <div style="padding:6px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1">
+                  ${rows.map(row => html`
+                    <div style="background:var(--zg-bg);border:1px solid var(--zg-border);border-radius:var(--zg-radius);padding:8px;cursor:pointer;font-size:12px"
+                         @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: dataRows.indexOf(row) })}>
+                      ${titleCol ? html`<div style="font-weight:600;margin-bottom:4px">${row[titleCol.field]}</div>` : nothing}
+                      ${valueCol ? html`<div style="color:var(--zg-text-secondary)">${this._formatValue(row[valueCol.field], valueCol)}</div>` : nothing}
+                    </div>
+                  `)}
+                </div>
+              </div>
+            `;
+          })}
+        </div>
+      </div>
+    `;
+  }
+
   // ─── Rich Toolbar ─────────────────────────────────────────────
 
   private _renderToolbar(totalRows: number) {
@@ -2961,6 +3085,15 @@ onMounted(() => {
         </div>
 
         <div class="zg-toolbar-right">
+          <!-- View Mode Switcher -->
+          <button class="zg-btn-icon ${this.viewMode === 'table' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'table'; }} title="${this._t('Vista tabla', 'Table view')}">${this._iconHtml('viewTable')}</button>
+          <button class="zg-btn-icon ${this.viewMode === 'form' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'form'; this._formIndex = 0; }} title="${this._t('Vista formulario', 'Form view')}">${this._iconHtml('viewForm')}</button>
+          <button class="zg-btn-icon ${this.viewMode === 'cards' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'cards'; }} title="${this._t('Vista tarjetas', 'Cards view')}">${this._iconHtml('viewCards')}</button>
+          ${this.columns.some(c => c.statusColors) ? html`
+            <button class="zg-btn-icon ${this.viewMode === 'kanban' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'kanban'; if (!this.kanbanField) { const sc = this.columns.find(c => c.statusColors); if (sc) this.kanbanField = sc.field; } }} title="${this._t('Vista kanban', 'Kanban view')}">${this._iconHtml('viewKanban')}</button>
+          ` : nothing}
+          <span class="zg-toolbar-sep"></span>
+
           <!-- Clipboard -->
           ${this.enableClipboard ? html`
             <button class="zg-btn-icon" @click=${this._copyAll} title="${this._t('Copiar todo', 'Copy all')}">${this._iconHtml('clipboard')}</button>
