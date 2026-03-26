@@ -2139,7 +2139,7 @@ export class ZenttoGrid extends LitElement {
       + (this.enableRowSelection ? 1 : 0)
       + (this.enableDragDrop ? 1 : 0)
       + (hasActions ? 1 : 0);
-    const actionsWidth = hasActions ? Math.max(60, this.actionButtons.length * 32 + 12) : 0;
+    const actionsWidth = hasActions ? Math.max(80, this.actionButtons.length * 40 + 16) : 0;
     const selCount = this._selectedRows.size;
 
     return html`
