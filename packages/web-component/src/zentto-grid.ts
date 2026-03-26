@@ -1292,9 +1292,8 @@ export class ZenttoGrid extends LitElement {
     if (e.key === 'Enter') {
       e.preventDefault();
       this._commitEdit(row);
-      // Move down
-      this._moveActiveCell(1, 0);
-      this._editActiveCell();
+      // Move right to next column (like Tab)
+      this._moveActiveCell(0, 1);
     } else if (e.key === 'Escape') {
       this._editingCell = null;
     } else if (e.key === 'Tab') {
@@ -2863,17 +2862,12 @@ export class ZenttoGrid extends LitElement {
         <!-- Rich Toolbar -->
         ${this.enableToolbar ? this._renderToolbar(totalRows) : nothing}
 
-        <!-- CRUD bar (when editing enabled and create or delete needed) -->
-        ${this.enableEditing && (this.enableCreate || selCount > 0) ? html`
+        <!-- CRUD bar (only for bulk delete when rows selected) -->
+        ${this.enableEditing && selCount > 0 ? html`
           <div class="zg-crud-bar">
-            ${this.enableCreate ? html`
-              <button class="zg-btn-primary" @click=${() => this.addRow()}>${this._iconHtml('add')} ${this.createLabel || this._t('Agregar', 'Add')}</button>
-            ` : nothing}
-            ${selCount > 0 ? html`
-              <button class="zg-btn-danger" @click=${() => this.deleteSelected()}>
-                ${this._iconHtml('delete')} ${this._t('Eliminar', 'Delete')} (${selCount})
-              </button>
-            ` : nothing}
+            <button class="zg-btn-danger" @click=${() => this.deleteSelected()}>
+              ${this._iconHtml('delete')} ${this._t('Eliminar', 'Delete')} (${selCount})
+            </button>
           </div>
         ` : nothing}
 
