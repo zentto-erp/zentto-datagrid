@@ -1852,6 +1852,10 @@ export class ZenttoGrid extends LitElement {
       } catch { return String(val); }
     }
 
+    // Handle object values gracefully
+    if (typeof val === 'object' && val !== null) {
+      return (val as any).label ?? (val as any).name ?? (val as any).text ?? (val as any).value ?? '';
+    }
     return String(val);
   }
 
@@ -1879,9 +1883,11 @@ export class ZenttoGrid extends LitElement {
     }
 
     if (col.statusColors && val != null) {
-      const color = col.statusColors[String(val)] ?? 'default';
+      // Extract text from object values (e.g. { label: 'Active', value: 1 })
+      const text = typeof val === 'object' ? ((val as any).label ?? (val as any).name ?? (val as any).text ?? (val as any).value ?? JSON.stringify(val)) : String(val);
+      const color = col.statusColors[text] ?? 'default';
       const variant = col.statusVariant ?? 'filled';
-      return html`<span class="zg-chip zg-chip--${color} zg-chip--${variant}">${val}</span>`;
+      return html`<span class="zg-chip zg-chip--${color} zg-chip--${variant}">${text}</span>`;
     }
 
     if (col.progressMax != null) {
