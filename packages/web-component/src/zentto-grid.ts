@@ -30,6 +30,10 @@ import {
   sparklineLinePath,
   sparklineAreaPath,
   sparklineBars,
+  AuditTrail,
+  generateQrSvg,
+  generateBarcodeSvg,
+  generateTimelineSvg,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -48,6 +52,8 @@ import type {
   NormalizedRange,
   PasteData,
   SparklineData,
+  AuditEntry,
+  TimelineEntry,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -236,6 +242,10 @@ export class ZenttoGrid extends LitElement {
       link:       s('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
       attachment: s('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
       star:       s('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+      sparkle:    s('<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M18 14l.75 2.25L21 17l-2.25.75L18 20l-.75-2.25L15 17l2.25-.75L18 14z"/>', ' fill="currentColor" stroke="none"'),
+      barcodeIcon:s('<rect x="3" y="4" width="2" height="16"/><rect x="7" y="4" width="1" height="16"/><rect x="10" y="4" width="3" height="16"/><rect x="15" y="4" width="1" height="16"/><rect x="18" y="4" width="2" height="16"/>', ' fill="currentColor" stroke="none"'),
+      timelineIcon:s('<line x1="3" y1="12" x2="21" y2="12"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>', ' fill="currentColor"'),
+      auditIcon:  s('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'),
     };
     const iconStr = this.icons[name] ?? defaults[name] ?? '';
     return iconStr;
@@ -286,6 +296,11 @@ export class ZenttoGrid extends LitElement {
 
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
+
+  // v0.8 — Audit Trail
+  @property({ type: Boolean, attribute: 'enable-audit' }) enableAudit = false;
+  @property({ attribute: false }) auditUser?: string;
+  @property({ attribute: false }) aiResults: Record<string, string> = {};
 
   // ─── Internal state ───────────────────────────────────────────
 
@@ -356,6 +371,10 @@ export class ZenttoGrid extends LitElement {
 
   // v0.2 — Undo/Redo
   private _undoRedoStack = new UndoRedoStack(200);
+
+  private _auditTrail = new AuditTrail();
+  private _aiCache = new Map<string, string>();
+  @state() private _aiLoading = new Set<string>();
 
   // v0.2 — Range Selection state
   @state() private _rangeAnchor: { rowIdx: number; colIdx: number } | null = null;
@@ -1006,6 +1025,14 @@ export class ZenttoGrid extends LitElement {
 
     // Push undo action
     this._pushUndoAction({ type: 'cell-edit', timestamp: Date.now(), rowKey, field, oldValue, newValue });
+
+    // v0.8 — Audit trail
+    if (this.enableAudit) {
+      const ae: AuditEntry = { field, rowKey, oldValue, newValue, user: this.auditUser || 'unknown', timestamp: Date.now() };
+      this._auditTrail.record(ae);
+      this._dispatchGridEvent('audit-change', { entry: ae, history: this._auditTrail.getHistory(rowKey, field) });
+      this.requestUpdate();
+    }
 
     // Update local data — create new array for Lit reactivity
     const updatedRow = { ...currentRow, [field]: newValue };
@@ -1701,6 +1728,26 @@ export class ZenttoGrid extends LitElement {
     }
   }
 
+  private _getAuditTooltip(row: GridRow, field: string): string {
+    const rk = this._getRowKey(row);
+    const h = this._auditTrail.getHistory(rk, field);
+    if (h.length === 0) return '';
+    const l = h[h.length - 1];
+    const d = new Date(l.timestamp);
+    const ds = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    return `${this._t('Cambiado por', 'Changed by')} ${l.user} ${this._t('el', 'on')} ${ds} — ${this._t('Anterior', 'Previous')}: ${String(l.oldValue)}`;
+  }
+
+  setAiResult(cacheKey: string, result: string) {
+    this._aiCache.set(cacheKey, result);
+    const nl = new Set(this._aiLoading);
+    nl.delete(cacheKey);
+    this._aiLoading = nl;
+    this.requestUpdate();
+  }
+
+  getAuditTrail() { return this._auditTrail; }
+
   // ─── v0.2 — Range Selection ─────────────────────────────────
 
   private get _normalizedRange(): NormalizedRange | null {
@@ -2008,6 +2055,42 @@ export class ZenttoGrid extends LitElement {
       return html`<a class="zg-link" href="${href}" target="${col.linkTarget || '_blank'}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
     }
 
+    // v0.8 — Barcode / QR
+    if (col.barcode && val != null && !isTotals) {
+      const data = String(val);
+      if (data) {
+        const svg = col.barcode === 'qr' ? generateQrSvg(data, 32) : generateBarcodeSvg(data, col.barcode, 120, 28);
+        return html`<span class="zg-barcode-cell" title="${data}">${unsafeHTML(svg)}</span>`;
+      }
+    }
+    // v0.8 — Status Timeline
+    if (col.timeline && !isTotals) {
+      const td = (col.timelineField ? row[col.timelineField] : val) as TimelineEntry[] | undefined;
+      if (Array.isArray(td) && td.length > 0) {
+        const svg = generateTimelineSvg(td, 120);
+        return html`<span class="zg-timeline-cell">${unsafeHTML(svg)}</span>`;
+      }
+      return html`<span style="color:var(--zg-text-muted)">&mdash;</span>`;
+    }
+    // v0.8 — AI Column
+    if (col.ai && !isTotals) {
+      const rk = this._getRowKey(row), ck = `${rk}_${col.field}`;
+      if (this.aiResults[ck]) return html`<span class="zg-ai-cell">${this.aiResults[ck]}</span>`;
+      if (this._aiCache.has(ck)) return html`<span class="zg-ai-cell">${this._aiCache.get(ck)}</span>`;
+      if (this._aiLoading.has(ck)) return html`<span class="zg-ai-loading"><span class="zg-ai-spinner"></span></span>`;
+      this._aiLoading = new Set([...this._aiLoading, ck]);
+      const ctx: Record<string, unknown> = {};
+      for (const f of col.ai.fields) ctx[f] = row[f];
+      setTimeout(() => this._dispatchGridEvent('ai-request', { row, prompt: col.ai!.prompt, fields: ctx, field: col.field, cacheKey: ck }), 0);
+      return html`<span class="zg-ai-loading"><span class="zg-ai-spinner"></span></span>`;
+    }
+    // v0.8 — Cell Hyperlinks
+    if (col.hyperlink && val != null && !isTotals) {
+      let href = '#';
+      if (col.hyperlinkPattern) { href = col.hyperlinkPattern.replace(/\{(\w+)\}/g, (_: string, f: string) => String(row[f] ?? '')); }
+      else { href = String(val); }
+      return html`<a class="zg-link" href="${href}" target="${col.hyperlinkTarget || '_blank'}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
+    }
     return html`${this._formatValue(val, col, isTotals)}`;
   }
 
@@ -2358,7 +2441,7 @@ export class ZenttoGrid extends LitElement {
                     @click=${() => this._handleSort(col.field)}
                     @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._handleSort(col.field); } }}
                   >
-                    <span>${col.header || col.field}${this._getSortIcon(col.field)}</span>
+                    <span>${col.ai ? html`<span class="zg-ai-sparkle" title="AI">${this._iconHtml('sparkle')}</span> ` : nothing}${col.header || col.field}${this._getSortIcon(col.field)}</span>
                     ${this.enableHeaderMenu ? html`
                       <span class="zg-th-menu-trigger" @click=${(e: MouseEvent) => this._openHeaderMenu(e, col.field)} title="${this._t('Menu de columna', 'Column menu')}">${this._iconHtml('menu')}</span>
                     ` : nothing}
@@ -2484,7 +2567,7 @@ export class ZenttoGrid extends LitElement {
                               @keydown=${(e: KeyboardEvent) => this._handleEditKeydown(e, row)}
                               @blur=${() => this._commitEdit(row)}
                               autofocus />
-                          ` : this._renderCellContent(val, col, row)}
+                          ` : html`${this.enableAudit && this._auditTrail.hasHistory(this._getRowKey(row), col.field) ? html`<span class="zg-audit-dot" title="${this._getAuditTooltip(row, col.field)}"></span>` : nothing}${this._renderCellContent(val, col, row)}`}
                         </td>
                       `;
                     })}

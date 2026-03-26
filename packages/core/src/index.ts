@@ -75,3 +75,14 @@ export type { SparklineType, SparklineConfig, SparklineData } from './data/spark
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';
 export type { GridLayout } from './layout/persistence';
+
+// v0.8.0 — Audit Trail
+export { AuditTrail } from './data/audit';
+export type { AuditEntry } from './data/audit';
+
+// v0.8.0 — Barcode / QR
+export { generateQrSvg, generateBarcodeSvg } from './visualization/barcode';
+
+// v0.8.0 — Status Timeline
+export { generateTimelineSvg } from './visualization/timeline';
+export type { TimelineEntry } from './visualization/timeline';

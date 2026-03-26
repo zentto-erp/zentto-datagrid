@@ -128,6 +128,26 @@ export interface ColumnDef {
   sparklineField?: string;
   /** Sparkline color override */
   sparklineColor?: string;
+
+  // v0.8.0 — Barcode / QR
+  barcode?: 'qr' | 'code128' | 'ean13' | 'code39';
+
+  // v0.8.0 — Status Timeline
+  timeline?: boolean;
+  timelineField?: string;
+
+  // v0.8.0 — AI Column
+  ai?: {
+    prompt: string;
+    fields: string[];
+    apiUrl?: string;
+    cache?: boolean;
+  };
+
+  // v0.8.0 — Cell Hyperlinks
+  hyperlink?: boolean;
+  hyperlinkPattern?: string;
+  hyperlinkTarget?: '_blank' | '_self';
 }
 
 /** Column group (multi-level headers) */
