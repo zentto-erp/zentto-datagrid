@@ -2,6 +2,33 @@
 
 All notable changes to `@zentto/datagrid` will be documented in this file.
 
+## [1.2.0] - 2026-03-26
+
+### Added
+- **Chart as full view** — Charts are now a view mode (like table, form, cards, kanban). Hides table and uses full space.
+- **8 chart types** — Bar, Line, Area, Pie, Donut, Stacked, Combo, Scatter. All render correctly.
+- **Chart config panel** — Type selector, X axis dropdown, Y axis multi-select buttons, aggregation, title input, legend toggle
+- **Help panel** — 6 cards explaining how to create useful charts for users and developers
+- **Values on bars** — Bar/Stacked/Combo show numeric values inside (white) or above (colored) each bar
+- **Values on points** — Line/Area show numeric values above each data point
+- **Labels on scatter** — Scatter shows category name near each point
+- **Multi-series** — Select multiple Y fields to compare in the same chart
+- **Filters apply to charts** — Quick search and header filters affect chart data in real time
+- **Note indicator fixed** — `position: relative` on `.zg-td` makes orange triangle visible
+- **Note editor context** — Shows field name and value in the edit modal title ("Nota: Harina de Trigo 1kg")
+- **Notes in context menu** — Add/Edit/Delete note integrated in the main right-click menu (no separate menu)
+- **Single tooltip on notes** — Removed CSS `::after` tooltip, only native `title` attribute
+
+### Fixed
+- **ChildPart error resolved** — Replaced `unsafeHTML()` in chart SVGs with `.innerHTML` directive to avoid Lit DOM tracking issues
+- **Chart SVG rendering** — Line, Area, Pie, Donut, Scatter now use string-based SVG injected via `.innerHTML` instead of Lit `html` template (which doesn't support SVG elements)
+- **Removed download PNG** — Feature removed temporarily due to SVG-to-canvas limitations in Shadow DOM
+
+## [1.1.0] - 2026-03-26
+
+### Added
+- **Chart view (initial)** — First implementation with SVG rendering (replaced in 1.2.0)
+
 ## [1.0.2] - 2026-03-26
 
 ### Fixed

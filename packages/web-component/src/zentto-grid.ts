@@ -401,6 +401,7 @@ export class ZenttoGrid extends LitElement {
   @state() private _chartType: 'bar' | 'line' | 'pie' | 'area' | 'donut' | 'scatter' | 'stacked' | 'combo' = 'bar';
   @state() private _chartXField = '';
   @state() private _chartYFields: string[] = [];
+  @state() private _chartYKey = 0; // Force re-render on Y change
   @state() private _chartAgg: 'sum' | 'avg' | 'count' | 'min' | 'max' = 'sum';
   @state() private _chartTitle = '';
   @state() private _chartShowLegend = true;
@@ -3941,7 +3942,7 @@ onMounted(() => {
 
   /** Aggregate data for chart */
   private _getChartData() {
-    const rows = this._filteredRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const rows = this._sortedRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
     if (!this._chartXField || this._chartYFields.length === 0) return { labels: [] as string[], series: [] as { name: string; values: number[] }[] };
 
     // Group by X field
@@ -3977,7 +3978,14 @@ onMounted(() => {
   /** Render SVG chart */
   private _renderChartSvg(width: number, height: number) {
     const { labels, series } = this._getChartData();
-    if (labels.length === 0 || series.length === 0) return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--zg-text-muted)">${this._t('Configura los ejes para ver el grafico', 'Configure axes to see the chart')}</div>`;
+    if (labels.length === 0 || series.length === 0) {
+      const rows = this._filteredRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+      return html`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--zg-text-muted);gap:8px">
+        <span style="font-size:40px">${this._iconHtml('chart')}</span>
+        <span>${this._t('Configura los ejes para ver el grafico', 'Configure axes to see the chart')}</span>
+        <span style="font-size:11px">X: ${this._chartXField || '—'} | Y: ${this._chartYFields.join(', ') || '—'} | ${rows.length} ${this._t('filas', 'rows')}</span>
+      </div>`;
+    }
 
     const pad = { top: 40, right: 20, bottom: 60, left: 60 };
     const w = width - pad.left - pad.right;
@@ -4123,37 +4131,74 @@ onMounted(() => {
   }
 
   /** Copy chart as PNG to clipboard */
-  private async _copyChartAsImage() {
-    const svgEl = this.shadowRoot?.querySelector('.zg-chart-svg') as SVGElement;
-    if (!svgEl) return;
-    const svgData = new XMLSerializer().serializeToString(svgEl);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    const blob = new Blob([svgData], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    img.onload = async () => {
-      canvas.width = img.width * 2;
-      canvas.height = img.height * 2;
-      ctx!.scale(2, 2);
-      ctx!.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      try {
-        const pngBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-        this._dispatchGridEvent('chart-copied', {});
-      } catch { /* clipboard not available */ }
-    };
-    img.src = url;
+  private async _downloadChartAsImage() {
+    // Find the chart container
+    const container = this.shadowRoot?.querySelector('.zg-table-wrapper') as HTMLElement;
+    if (!container) throw new Error('no-container');
+
+    // Try SVG first (line, area, pie, donut, scatter) — skip small icon SVGs
+    const allSvgs = container.querySelectorAll('svg');
+    let svgEl: SVGElement | null = null;
+    for (const s of allSvgs) {
+      const w = s.getAttribute('width') || '0';
+      if (parseInt(w) > 100) { svgEl = s as SVGElement; break; }
+    }
+    if (svgEl) {
+      // Clone SVG with inline styles for standalone rendering
+      const clone = svgEl.cloneNode(true) as SVGElement;
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      // Add white background
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#fff');
+      clone.insertBefore(bg, clone.firstChild);
+      const svgData = new XMLSerializer().serializeToString(clone);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      return new Promise<void>((resolve) => {
+        img.onload = () => {
+          canvas.width = img.width * 2;
+          canvas.height = img.height * 2;
+          ctx.scale(2, 2);
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(b => {
+            if (b) {
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(b);
+              a.download = `${this.exportFilename || 'chart'}-${this._chartType}.png`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }
+            resolve();
+          }, 'image/png');
+        };
+        img.src = url;
+      });
+    }
+
+    // Fallback for HTML charts (bar, stacked, combo): use canvas rendering
+    // Create a simple screenshot by re-rendering the bars as canvas
+    const chartArea = container.querySelector('div') as HTMLElement;
+    if (!chartArea) throw new Error('no-chart');
+    // Use browser print as fallback
+    const printWin = window.open('', '_blank', 'width=900,height=600');
+    if (printWin) {
+      printWin.document.write(`<html><head><title>${this._chartTitle || 'Chart'}</title></head><body style="margin:0;background:#fff">${chartArea.innerHTML}</body></html>`);
+      printWin.document.close();
+      setTimeout(() => { printWin.print(); printWin.close(); }, 300);
+    }
   }
 
   /** Toggle Y field */
   private _toggleChartYField(field: string) {
-    if (this._chartYFields.includes(field)) {
-      this._chartYFields = this._chartYFields.filter(f => f !== field);
-    } else {
-      this._chartYFields = [...this._chartYFields, field];
-    }
+    const current = [...this._chartYFields];
+    const idx = current.indexOf(field);
+    if (idx >= 0) { current.splice(idx, 1); } else { current.push(field); }
+    this._chartYFields = current;
+    this._chartYKey++; // Force Lit to detect change
   }
 
   private _renderChartView() {
@@ -4201,12 +4246,16 @@ onMounted(() => {
           <!-- Y axes (multi-select) -->
           <div style="display:flex;align-items:center;gap:4px">
             <span style="font-weight:600;color:var(--zg-text-muted);font-size:10px">Y:</span>
-            ${numCols.map((c, i) => html`
-              <label style="display:flex;align-items:center;gap:2px;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid ${this._chartYFields.includes(c.field) ? this._chartColors[this._chartYFields.indexOf(c.field) % this._chartColors.length] : 'var(--zg-border)'};background:${this._chartYFields.includes(c.field) ? this._chartColors[this._chartYFields.indexOf(c.field) % this._chartColors.length] + '18' : 'transparent'};transition:all 0.15s">
-                <input type="checkbox" .checked=${this._chartYFields.includes(c.field)} @change=${() => this._toggleChartYField(c.field)} style="width:12px;height:12px;accent-color:${this._chartColors[i % this._chartColors.length]}">
-                <span style="font-size:11px">${c.header || c.field}</span>
-              </label>
-            `)}
+            ${numCols.map((c, i) => {
+              const isActive = this._chartYFields.includes(c.field);
+              const color = this._chartColors[i % this._chartColors.length];
+              return html`
+              <button class="zg-config-fw-tab ${isActive ? 'zg-config-fw-tab--active' : ''}"
+                      style="${isActive ? `border-color:${color};background:${color}18` : ''}"
+                      @click=${() => this._toggleChartYField(c.field)}>
+                ${c.header || c.field}
+              </button>`;
+            })}
           </div>
 
           <!-- Aggregation -->
@@ -4228,7 +4277,15 @@ onMounted(() => {
           <span style="flex:1"></span>
 
           <!-- Actions -->
-          <button class="zg-btn-icon" @click=${() => this._copyChartAsImage()} title="${this._t('Copiar como imagen', 'Copy as image')}">${this._iconHtml('copy')}</button>
+          <button class="zg-btn-icon" id="zg-download-chart-btn" @click=${async () => {
+            const btn = this.shadowRoot?.getElementById('zg-download-chart-btn');
+            try {
+              await this._downloadChartAsImage();
+              if (btn) { btn.innerHTML = this._icon('check'); btn.style.color = 'var(--zg-success)'; setTimeout(() => { btn.innerHTML = this._icon('export'); btn.style.color = ''; }, 2000); }
+            } catch {
+              if (btn) { btn.innerHTML = this._icon('close'); btn.style.color = 'var(--zg-error)'; setTimeout(() => { btn.innerHTML = this._icon('export'); btn.style.color = ''; }, 2000); }
+            }
+          }} title="${this._t('Ayuda', 'Help')}">${this._iconHtml('info')}</button>
           <button class="zg-btn-icon" @click=${() => { this._chartShowHelp = !this._chartShowHelp; }} title="${this._t('Ayuda', 'Help')}">${this._iconHtml('info')}</button>
         </div>
 
@@ -4269,11 +4326,152 @@ onMounted(() => {
         ` : nothing}
 
         <!-- Chart area -->
-        <div style="flex:1;padding:12px;overflow:auto;display:flex;align-items:center;justify-content:center;min-height:300px">
-          ${this._renderChartSvg(800, 450)}
+        <div style="padding:12px;overflow:auto;min-height:400px;height:calc(100vh - 350px)">
+          ${this._renderChartContent()}
         </div>
       </div>
     `;
+  }
+
+  private _renderChartContent() {
+            const { labels, series } = this._getChartData();
+            const k = this._chartYKey;
+            if (labels.length === 0 || series.length === 0) {
+              return html`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--zg-text-muted);gap:8px">
+                <span style="font-size:40px">${this._iconHtml('chart')}</span>
+                <span>${this._t('Selecciona ejes X e Y', 'Select X and Y axes')}</span>
+              </div>`;
+            }
+            const maxVal = Math.max(...series.flatMap(s => s.values), 1);
+            const barH = 300;
+            const type = this._chartType;
+            const colors = this._chartColors;
+            const title = this._chartTitle ? html`<div style="text-align:center;font-size:16px;font-weight:700;margin-bottom:12px;color:var(--zg-text)">${this._chartTitle}</div>` : nothing;
+            const legend = this._chartShowLegend ? html`
+              <div style="display:flex;justify-content:center;gap:16px;margin-top:12px">
+                ${series.map((s, si) => html`<div style="display:flex;align-items:center;gap:4px;font-size:12px"><div style="width:12px;height:12px;border-radius:3px;background:${colors[si % colors.length]}"></div><span style="color:var(--zg-text-secondary)">${s.name}</span></div>`)}
+              </div>` : nothing;
+
+            // ── BAR / STACKED / COMBO ──
+            if (type === 'bar' || type === 'stacked' || type === 'combo') {
+              const barW = type === 'stacked' ? Math.max(30, Math.min(80, 700 / labels.length)) : Math.max(16, Math.min(50, 700 / labels.length / series.length));
+              return html`<div style="width:100%;overflow-x:auto">${title}
+                <div style="display:flex;align-items:flex-end;gap:2px;height:${barH}px;padding:0 20px;border-bottom:2px solid var(--zg-border)">
+                  ${labels.map((label, li) => html`
+                    <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:${(type === 'stacked' ? barW : barW * series.length) + 4}px">
+                      <div style="display:flex;${type === 'stacked' ? 'flex-direction:column-reverse' : 'align-items:flex-end;gap:1px'};height:${barH - 20}px">
+                        ${series.map((s, si) => {
+                          const val = s.values[li] || 0;
+                          const h = Math.max(2, (val / maxVal) * (barH - 40));
+                          const color = colors[si % colors.length];
+                          const shortVal = val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val >= 1 ? Math.round(val).toString() : val.toFixed(1);
+                          return html`<div style="width:${barW}px;height:${h}px;background:${color};${type === 'stacked' ? '' : 'border-radius:3px 3px 0 0;'}transition:all 0.3s;cursor:pointer;opacity:0.85;display:flex;align-items:flex-start;justify-content:center;position:relative" title="${s.name}: ${val.toLocaleString()}" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.opacity = '1'; (e.target as HTMLElement).style.transform = 'scaleY(1.02)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.opacity = '0.85'; (e.target as HTMLElement).style.transform = ''; }}>
+                            ${h > 18 ? html`<span style="font-size:9px;font-weight:700;color:#fff;margin-top:2px;text-shadow:0 1px 2px rgba(0,0,0,0.3)">${shortVal}</span>` : html`<span style="position:absolute;bottom:100%;font-size:9px;font-weight:600;color:${color};margin-bottom:1px">${shortVal}</span>`}
+                          </div>`;
+                        })}
+                      </div>
+                      <div style="font-size:10px;color:var(--zg-text-muted);margin-top:4px;text-align:center;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</div>
+                    </div>
+                  `)}
+                </div>${legend}</div>`;
+            }
+
+            // ── LINE / AREA (SVG via unsafeHTML — Lit html doesn't support SVG elements) ──
+            if (type === 'line' || type === 'area') {
+              const w = Math.max(600, labels.length * 60);
+              const h = barH;
+              const padL = 50, padB = 30;
+              let svgContent = '';
+              // Grid lines + Y labels
+              for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+                const y = h - f * h;
+                svgContent += `<line x1="${padL}" y1="${y}" x2="${w}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3,3"/>`;
+                svgContent += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" fill="#9ca3af" font-size="10">${Math.round(f * maxVal)}</text>`;
+              }
+              // Series
+              for (let si = 0; si < series.length; si++) {
+                const s = series[si];
+                const color = colors[si % colors.length];
+                const pts = s.values.map((v, i) => ({ x: padL + (i / (labels.length - 1 || 1)) * (w - padL - 10), y: h - (v / maxVal) * (h - 10), v }));
+                const line = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+                if (type === 'area') svgContent += `<polygon points="${padL},${h} ${line} ${pts[pts.length - 1]?.x.toFixed(1) || padL},${h}" fill="${color}" opacity="0.12"/>`;
+                svgContent += `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`;
+                for (const p of pts) {
+                  svgContent += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#fff" stroke-width="2"><title>${s.name}: ${p.v.toLocaleString()}</title></circle>`;
+                  const shortV = p.v >= 1000 ? (p.v / 1000).toFixed(1) + 'k' : Math.round(p.v).toString();
+                  svgContent += `<text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="9" font-weight="700">${shortV}</text>`;
+                }
+              }
+              // X labels
+              for (let i = 0; i < labels.length; i++) {
+                const x = padL + (i / (labels.length - 1 || 1)) * (w - padL - 10);
+                const l = labels[i].length > 10 ? labels[i].substring(0, 10) + '..' : labels[i];
+                svgContent += `<text x="${x.toFixed(1)}" y="${h + 16}" text-anchor="middle" fill="#9ca3af" font-size="10">${l}</text>`;
+              }
+              const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h + padB}" viewBox="0 0 ${w} ${h + padB}" style="display:block">${svgContent}</svg>`;
+              return html`<div style="width:100%;overflow-x:auto">${title}<div .innerHTML=${svgStr}></div>${legend}</div>`;
+            }
+
+            // ── PIE / DONUT (SVG via unsafeHTML) ──
+            if (type === 'pie' || type === 'donut') {
+              const vals = series[0]?.values || [];
+              const total = vals.reduce((a, b) => a + b, 0) || 1;
+              const sz = 300, cx = sz / 2, cy = sz / 2, r = sz / 2.5, ir = type === 'donut' ? r * 0.55 : 0;
+              let angle = -Math.PI / 2;
+              let svgContent = '';
+              for (let i = 0; i < vals.length; i++) {
+                const val = vals[i];
+                const slice = (val / total) * Math.PI * 2;
+                if (slice < 0.01) { angle += slice; continue; }
+                const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+                const x2 = cx + r * Math.cos(angle + slice), y2 = cy + r * Math.sin(angle + slice);
+                const large = slice > Math.PI ? 1 : 0;
+                const color = colors[i % colors.length];
+                let d: string;
+                if (ir > 0) {
+                  const ix1 = cx + ir * Math.cos(angle), iy1 = cy + ir * Math.sin(angle);
+                  const ix2 = cx + ir * Math.cos(angle + slice), iy2 = cy + ir * Math.sin(angle + slice);
+                  d = `M${ix1.toFixed(1)},${iy1.toFixed(1)} L${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ir},${ir} 0 ${large},0 ${ix1.toFixed(1)},${iy1.toFixed(1)}`;
+                } else {
+                  d = `M${cx},${cy} L${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z`;
+                }
+                svgContent += `<path d="${d}" fill="${color}" opacity="0.85" style="cursor:pointer"><title>${labels[i]}: ${val.toLocaleString()} (${((val / total) * 100).toFixed(1)}%)</title></path>`;
+                angle += slice;
+              }
+              const pieSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}">${svgContent}</svg>`;
+              return html`<div style="display:flex;flex-direction:column;align-items:center">${title}
+                <div .innerHTML=${pieSvg}></div>
+                <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">
+                  ${labels.map((l, i) => html`<div style="display:flex;align-items:center;gap:4px;font-size:11px"><div style="width:10px;height:10px;border-radius:2px;background:${colors[i % colors.length]}"></div><span style="color:var(--zg-text-secondary)">${l} (${((vals[i] / total) * 100).toFixed(0)}%)</span></div>`)}
+                </div>
+              </div>`;
+            }
+
+            // ── SCATTER (SVG via unsafeHTML) ──
+            if (type === 'scatter') {
+              if (series.length < 2) return html`<div style="text-align:center;color:var(--zg-text-muted);padding:40px">${this._t('Scatter necesita 2 campos Y', 'Scatter needs 2 Y fields')}</div>`;
+              const xs = series[0].values, ys = series[1].values;
+              const maxX = Math.max(...xs, 1), maxY = Math.max(...ys, 1);
+              const w = 600, h = 400, pad = 50;
+              let scatterSvg = '';
+              for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+                const y = h - pad - f * (h - pad * 2);
+                scatterSvg += `<line x1="${pad}" y1="${y}" x2="${w - 10}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3,3"/>`;
+              }
+              for (let i = 0; i < xs.length; i++) {
+                const x = pad + (xs[i] / maxX) * (w - pad - 10);
+                const y = h - pad - (ys[i] / maxY) * (h - pad * 2);
+                scatterSvg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="${colors[0]}" opacity="0.7"><title>${labels[i]}: ${series[0].name}=${xs[i].toFixed(1)}, ${series[1].name}=${ys[i].toFixed(1)}</title></circle>`;
+                scatterSvg += `<text x="${x.toFixed(1)}" y="${(y - 10).toFixed(1)}" text-anchor="middle" fill="#6b7280" font-size="9">${labels[i].length > 8 ? labels[i].substring(0, 8) + '..' : labels[i]}</text>`;
+              }
+              scatterSvg += `<text x="${w / 2}" y="${h - 5}" text-anchor="middle" fill="#9ca3af" font-size="11">${series[0].name}</text>`;
+              scatterSvg += `<text x="10" y="${h / 2}" text-anchor="middle" fill="#9ca3af" font-size="11" transform="rotate(-90,10,${h / 2})">${series[1].name}</text>`;
+              const scatterStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${scatterSvg}</svg>`;
+              return html`<div style="display:flex;flex-direction:column;align-items:center">${title}<div .innerHTML=${scatterStr}></div>${legend}</div>`;
+            }
+
+            // Fallback
+            return html`<div style="color:var(--zg-text-muted);text-align:center;padding:40px">${this._t('Tipo no soportado', 'Unsupported type')}: ${type}</div>`;
   }
 
   // ─── View: Form (one record at a time) ─────────────────────────
