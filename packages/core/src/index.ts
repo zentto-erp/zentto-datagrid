@@ -23,6 +23,10 @@ export type {
   ActionButtonDef,
   CrudConfig,
   FormulaDefinition,
+  ChartConfig,
+  ChartType,
+  PrintOptions,
+  NoteChangeDetail,
 } from './types';
 
 // Data operations
@@ -75,3 +79,6 @@ export type { SparklineType, SparklineConfig, SparklineData } from './data/spark
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';
 export type { GridLayout } from './layout/persistence';
+
+export { generateChartSvg, detectNumericFields } from './visualization/charts';
+export { generatePrintHtml } from './export/print';

@@ -30,6 +30,9 @@ import {
   sparklineLinePath,
   sparklineAreaPath,
   sparklineBars,
+  generateChartSvg,
+  detectNumericFields,
+  generatePrintHtml,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -48,6 +51,10 @@ import type {
   NormalizedRange,
   PasteData,
   SparklineData,
+  ChartConfig,
+  ChartType,
+  PrintOptions,
+  NoteChangeDetail,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -236,6 +243,8 @@ export class ZenttoGrid extends LitElement {
       link:       s('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
       attachment: s('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
       star:       s('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+      chart:      s('<path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>'),
+      note:       s('<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'),
     };
     const iconStr = this.icons[name] ?? defaults[name] ?? '';
     return iconStr;
@@ -286,6 +295,13 @@ export class ZenttoGrid extends LitElement {
 
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
+
+  // v0.7
+  @property({ type: Boolean, attribute: 'enable-charts' }) enableCharts = false;
+  @property({ type: Boolean, attribute: 'enable-print' }) enablePrint = false;
+  @property({ type: String, attribute: 'print-title' }) printTitle = '';
+  @property({ type: Boolean, attribute: 'enable-comments' }) enableComments = false;
+  @property({ attribute: false }) cellNotes: Record<string, string> = {};
 
   // ─── Internal state ───────────────────────────────────────────
 
@@ -365,6 +381,12 @@ export class ZenttoGrid extends LitElement {
   // Date picker state
   @state() private _datePickerOpen = false;
   @state() private _datePickerMonth = new Date();
+  @state() private _chartOpen = false;
+  @state() private _chartType: 'bar' | 'line' | 'pie' | 'area' | 'donut' = 'bar';
+  @state() private _chartLabelField = '';
+  @state() private _chartValueFields: string[] = [];
+  @state() private _noteMenu: { x: number; y: number; rowKey: string; field: string } | null = null;
+  @state() private _noteEditing: { rowKey: string; field: string; text: string } | null = null;
 
   // ─── i18n helper ────────────────────────────────────────────
   /** i18n helper — uses locale prefix to pick translation. Falls back to English. */
@@ -766,6 +788,22 @@ export class ZenttoGrid extends LitElement {
     downloadCsv(this._filteredRows, this._visibleColumns, this.exportFilename + '-visible');
     this._closeContextMenu();
   }
+
+  // v0.7 Charts
+  private _toggleChartPanel() { this._chartOpen = !this._chartOpen; if (this._chartOpen && !this._chartLabelField) { const tc = this.columns.find(c => !c.field.startsWith('__') && c.type !== 'number' && !c.currency && c.type !== 'actions'); if (tc) this._chartLabelField = tc.field; const nc = this.columns.filter(c => c.type === 'number' || c.currency); if (nc.length > 0) this._chartValueFields = [nc[0].field]; } }
+  private _getChartSvg(): string { if (!this._chartLabelField || this._chartValueFields.length === 0) return ''; return generateChartSvg(this._filteredRows, { type: this._chartType, labelField: this._chartLabelField, valueFields: this._chartValueFields }); }
+  private _toggleChartValueField(field: string) { if (this._chartValueFields.includes(field)) this._chartValueFields = this._chartValueFields.filter(f => f !== field); else this._chartValueFields = [...this._chartValueFields, field]; }
+  // v0.7 Print
+  private _handlePrint() { const vc = this._visibleColumns; const h = generatePrintHtml(this._filteredRows, vc, { title: this.printTitle || this.exportFilename || 'Zentto Grid', orientation: vc.length > 5 ? 'landscape' : 'portrait', showTotals: this.showTotals, headerRepeat: true }); const w = window.open('', '_blank'); if (w) { w.document.write(h); w.document.close(); } }
+  // v0.7 Notes
+  private _getNoteKey(rk: string, f: string): string { return `${rk}_${f}`; }
+  private _hasNote(row: GridRow, field: string): boolean { return !!this.cellNotes[this._getNoteKey(this._getRowKey(row), field)]; }
+  private _getNote(row: GridRow, field: string): string { return this.cellNotes[this._getNoteKey(this._getRowKey(row), field)] ?? ''; }
+  private _openNoteMenu(e: MouseEvent, row: GridRow, field: string) { e.preventDefault(); e.stopPropagation(); const c = this.shadowRoot?.querySelector('.zg-container'); const r = c?.getBoundingClientRect(); this._noteMenu = { x: r ? e.clientX - r.left : e.offsetX, y: r ? e.clientY - r.top : e.offsetY, rowKey: this._getRowKey(row), field }; }
+  private _closeNoteMenu() { this._noteMenu = null; }
+  private _startNoteEdit(action: 'add' | 'edit') { if (!this._noteMenu) return; const { rowKey, field } = this._noteMenu; this._noteEditing = { rowKey, field, text: action === 'add' ? '' : (this.cellNotes[this._getNoteKey(rowKey, field)] ?? '') }; this._closeNoteMenu(); }
+  private _saveNote() { if (!this._noteEditing) return; const { rowKey, field, text } = this._noteEditing; const key = this._getNoteKey(rowKey, field); const action = this.cellNotes[key] ? 'edit' : 'add'; this.cellNotes = { ...this.cellNotes, [key]: text }; this._dispatchGridEvent('note-change', { rowKey, field, note: text, action } as NoteChangeDetail); this._noteEditing = null; }
+  private _deleteNote() { if (!this._noteMenu) return; const { rowKey, field } = this._noteMenu; const key = this._getNoteKey(rowKey, field); const n = { ...this.cellNotes }; delete n[key]; this.cellNotes = n; this._dispatchGridEvent('note-change', { rowKey, field, note: '', action: 'delete' } as NoteChangeDetail); this._closeNoteMenu(); }
 
   // ─── Row Selection ─────────────────────────────────────────────
 
@@ -2280,6 +2318,8 @@ export class ZenttoGrid extends LitElement {
           </div>
         ` : nothing}
 
+        ${this.enableCharts && this._chartOpen ? html`<div class="zg-chart-panel"><div class="zg-chart-toolbar"><div class="zg-chart-controls"><select class="zg-chart-select" @change=${(e: Event) => { this._chartType = (e.target as HTMLSelectElement).value as any; }}><option value="bar" ?selected=${this._chartType === 'bar'}>${this._t('Barras', 'Bar')}</option><option value="line" ?selected=${this._chartType === 'line'}>${this._t('Linea', 'Line')}</option><option value="area" ?selected=${this._chartType === 'area'}>${this._t('Area', 'Area')}</option><option value="pie" ?selected=${this._chartType === 'pie'}>${this._t('Pastel', 'Pie')}</option><option value="donut" ?selected=${this._chartType === 'donut'}>${this._t('Dona', 'Donut')}</option></select><select class="zg-chart-select" @change=${(e: Event) => { this._chartLabelField = (e.target as HTMLSelectElement).value; }}><option value="">${this._t('Etiqueta...', 'Label...')}</option>${this.columns.filter(c => !c.field.startsWith('__') && c.type !== 'actions').map(c => html`<option value="${c.field}" ?selected=${this._chartLabelField === c.field}>${c.header || c.field}</option>`)}</select><span class="zg-chart-values-label">${this._t('Valores:', 'Values:')}</span>${this.columns.filter(c => c.type === 'number' || c.currency).map(c => html`<label class="zg-chart-value-toggle"><input type="checkbox" .checked=${this._chartValueFields.includes(c.field)} @change=${() => this._toggleChartValueField(c.field)} /><span>${c.header || c.field}</span></label>`)}</div><button class="zg-btn-icon" @click=${() => { this._chartOpen = false; }}>${this._iconHtml('close')}</button></div><div class="zg-chart-body">${unsafeHTML(this._getChartSvg())}</div></div>` : nothing}
+
         <!-- Group Drop Zone (drag column headers here to group) -->
         ${this.enableGroupDropZone ? html`
           <div class="zg-group-drop-zone ${this._groupFields.length === 0 ? 'zg-group-drop-zone--empty' : ''} ${this._groupDropOver ? 'zg-group-drop-zone--dragover' : ''}"
@@ -2469,7 +2509,7 @@ export class ZenttoGrid extends LitElement {
                             role="gridcell"
                             aria-colindex="${colIdx + 1}"
                             aria-selected="${isActive || inRange ? 'true' : 'false'}"
-                            @contextmenu=${(e: MouseEvent) => this._handleContextMenu(e, row, col.field, val)}
+                            @contextmenu=${(e: MouseEvent) => { this._handleContextMenu(e, row, col.field, val); if (this.enableComments) this._openNoteMenu(e, row, col.field); }}
                             @click=${() => this._handleCellClick(row, col.field, idx)}
                             @mousedown=${(e: MouseEvent) => this._handleRangeMouseDown(idx, colIdx, e)}
                             @mouseover=${() => this._handleRangeMouseOver(idx, colIdx)}
@@ -2485,6 +2525,7 @@ export class ZenttoGrid extends LitElement {
                               @blur=${() => this._commitEdit(row)}
                               autofocus />
                           ` : this._renderCellContent(val, col, row)}
+                          ${this.enableComments && this._hasNote(row, col.field) ? html`<span class="zg-note-indicator" title="${this._getNote(row, col.field)}"></span>` : nothing}
                         </td>
                       `;
                     })}
@@ -2558,6 +2599,9 @@ export class ZenttoGrid extends LitElement {
             </div>
           </div>
         ` : nothing}
+
+        ${this.enableComments && this._noteMenu ? html`<div class="zg-context-menu" style="left:${this._noteMenu.x}px;top:${this._noteMenu.y}px" @click=${(e: Event) => e.stopPropagation()}>${!this.cellNotes[this._getNoteKey(this._noteMenu.rowKey, this._noteMenu.field)] ? html`<div class="zg-context-item" @click=${() => this._startNoteEdit('add')}><span class="zg-header-menu-icon">${this._iconHtml('note')}</span> ${this._t('Agregar nota', 'Add note')}</div>` : html`<div class="zg-context-item" @click=${() => this._startNoteEdit('edit')}><span class="zg-header-menu-icon">${this._iconHtml('edit')}</span> ${this._t('Editar nota', 'Edit note')}</div><div class="zg-context-item" @click=${() => this._deleteNote()} style="color:var(--zg-error)"><span class="zg-header-menu-icon">${this._iconHtml('delete')}</span> ${this._t('Eliminar nota', 'Delete note')}</div>`}</div>` : nothing}
+        ${this._noteEditing ? html`<div class="zg-note-overlay" @click=${() => { this._noteEditing = null; }}></div><div class="zg-note-editor"><div class="zg-note-editor-header"><span>${this._t('Nota', 'Note')}</span><button class="zg-btn-icon" @click=${() => { this._noteEditing = null; }}>${this._iconHtml('close')}</button></div><textarea class="zg-note-textarea" .value=${this._noteEditing.text} @input=${(e: InputEvent) => { this._noteEditing = { ...this._noteEditing!, text: (e.target as HTMLTextAreaElement).value }; }} placeholder="${this._t('Escribe una nota...', 'Write a note...')}" autofocus></textarea><div class="zg-note-editor-footer"><button class="zg-btn" @click=${() => { this._noteEditing = null; }}>${this._t('Cancelar', 'Cancel')}</button><button class="zg-btn-primary" @click=${() => this._saveNote()}>${this._t('Guardar', 'Save')}</button></div></div>` : nothing}
 
         <!-- Header Context Menu (three dots) -->
         ${this._headerMenu ? html`
@@ -3245,6 +3289,8 @@ onMounted(() => {
           ` : nothing}
           <span class="zg-toolbar-sep"></span>
 
+          ${this.enableCharts ? html`<button class="zg-btn-icon ${this._chartOpen ? 'zg-btn-icon--active' : ''}" @click=${() => this._toggleChartPanel()} title="${this._t('Graficos', 'Charts')}">${this._iconHtml('chart')}</button>` : nothing}
+          ${this.enablePrint ? html`<button class="zg-btn-icon" @click=${() => this._handlePrint()} title="${this._t('Imprimir', 'Print')}">${this._iconHtml('print')}</button>` : nothing}
           <!-- Clipboard -->
           ${this.enableClipboard ? html`
             <button class="zg-btn-icon" @click=${this._copyAll} title="${this._t('Copiar todo', 'Copy all')}">${this._iconHtml('clipboard')}</button>

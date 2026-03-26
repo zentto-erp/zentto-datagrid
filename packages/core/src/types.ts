@@ -68,6 +68,7 @@ export interface ColumnDef {
   // ─── Aggregation ──────────────────────────────────────
   /** Aggregation for totals row */
   aggregation?: AggregationType;
+  aggregationLabel?: string;
 
   // ─── Currency ─────────────────────────────────────────
   /** ISO 4217 currency code or true for default */
@@ -338,3 +339,8 @@ export interface GridOptions {
   // ─── Range Selection ───────────────────
   enableRangeSelection?: boolean;
 }
+
+export type ChartType = 'bar' | 'line' | 'pie' | 'area' | 'donut';
+export interface ChartConfig { type: ChartType; title?: string; width?: number; height?: number; labelField: string; valueFields: string[]; colors?: string[]; }
+export interface PrintOptions { title?: string; orientation?: 'portrait' | 'landscape'; showTotals?: boolean; headerRepeat?: boolean; fontSize?: number; pageSize?: 'A4' | 'letter'; }
+export interface NoteChangeDetail { rowKey: string; field: string; note: string; action: 'add' | 'edit' | 'delete'; }
