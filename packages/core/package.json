@@ -19,10 +19,14 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "bench": "npx tsx src/__benchmarks__/benchmark.ts",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "@vitest/coverage-v8": "^3.0.0"
   },
   "license": "MIT",
   "repository": {
