@@ -330,6 +330,7 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'infinite-scroll-loading' }) infiniteScrollLoading = false;
   @property({ type: Boolean, attribute: 'infinite-scroll-done' }) infiniteScrollDone = false;
 
+
   // --- v0.7 --- Charts ------------------------------------------------
   @property({ type: Boolean, attribute: 'enable-charts' }) enableCharts = false;
 
@@ -345,6 +346,7 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'enable-audit' }) enableAudit = false;
   @property({ attribute: false }) auditUser?: string;
   @property({ attribute: false }) aiResults: Record<string, string> = {};
+
 
   // ─── v0.5 — Tree Data (Hierarchical) ──────────────────────────
   @property({ type: Boolean, attribute: 'enable-tree-data' }) enableTreeData = false;
@@ -2356,7 +2358,7 @@ export class ZenttoGrid extends LitElement {
     if (col.type === 'actions' && col.actions && !isTotals) {
       return html`${col.actions.map(btn => html`
         <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
-                title="${btn.label}"
+                title="${btn.label}" aria-label="${btn.label}"
                 @click=${(e: Event) => { e.stopPropagation(); this._dispatchGridEvent('action-click', { action: btn.action, row }); }}>
           ${unsafeHTML(this._resolveActionIcon(btn.icon))}
         </button>
@@ -3043,6 +3045,8 @@ export class ZenttoGrid extends LitElement {
                 return html`
                   <tr class="zg-row ${isTotals ? 'zg-row-totals' : idx % 2 ? 'zg-row-alt' : ''} ${isSelected ? 'zg-row--selected' : ''} ${isDragOver ? 'zg-row--drag-over' : ''}"
                       role="row" aria-rowindex="${this._page * this._pageSize + idx + 1}" aria-selected="${isSelected ? 'true' : 'false'}"
+                      aria-level="${(row as any)['__zentto_tree_level__'] != null ? String(Number((row as any)['__zentto_tree_level__']) + 1) : nothing}"
+                      aria-expanded="${this.enableMasterDetail && !isTotals ? (expanded ? 'true' : 'false') : nothing}"
                       draggable="${this.enableDragDrop && !isTotals ? 'true' : 'false'}"
                       @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: idx })}
                       @dragstart=${(e: DragEvent) => this._handleDragStart(e, row)}
@@ -3132,7 +3136,7 @@ export class ZenttoGrid extends LitElement {
                       <td class="zg-td zg-td-right zg-td-actions" style="position:sticky;right:0;z-index:3;background:var(--zg-row-bg, var(--zg-bg));white-space:nowrap">
                         ${this.actionButtons.map(btn => html`
                           <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
-                                  title="${btn.label}"
+                                  title="${btn.label}" aria-label="${btn.label}"
                                   @click=${(e: Event) => { e.stopPropagation(); this._handleAction(btn.action, row); }}>
                             ${unsafeHTML(this._resolveActionIcon(btn.icon))}
                           </button>
@@ -4026,9 +4030,9 @@ onMounted(() => {
 
           <!-- Export buttons (inline, each with distinct icon) -->
           ${this.showToolbarExport ? html`
-            <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV">${this._iconHtml('exportCsv')} <span style="font-size:11px;font-weight:600">CSV</span></button>
-            <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel" style="color:var(--zg-success,#0d9668)">${this._iconHtml('exportExcel')} <span style="font-size:11px;font-weight:600">Excel</span></button>
-            <button class="zg-btn-icon" @click=${this._exportJson} title="JSON" style="color:var(--zg-warning,#e67e22)">${this._iconHtml('exportJson')} <span style="font-size:11px;font-weight:600">JSON</span></button>
+            <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV" aria-label="${this._t("Exportar CSV", "Export CSV")}">${this._iconHtml('exportCsv')} <span style="font-size:11px;font-weight:600">CSV</span></button>
+            <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel" aria-label="${this._t("Exportar Excel", "Export Excel")}" style="color:var(--zg-success,#0d9668)">${this._iconHtml('exportExcel')} <span style="font-size:11px;font-weight:600">Excel</span></button>
+            <button class="zg-btn-icon" @click=${this._exportJson} title="JSON" aria-label="${this._t("Exportar JSON", "Export JSON")}" style="color:var(--zg-warning,#e67e22)">${this._iconHtml('exportJson')} <span style="font-size:11px;font-weight:600">JSON</span></button>
           ` : nothing}
 
           <!-- Import button (available when enableImport or enableEditing) -->
