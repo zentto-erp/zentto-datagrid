@@ -490,8 +490,16 @@ export class ZenttoGrid extends LitElement {
     // Server-side mode: skip all local filtering
     if (this.paginationMode === 'server') return [...this.rows];
 
+    // Collect formulas from both the formulas prop AND column definitions
+    const allFormulas = [...this.formulas];
+    for (const col of this.columns) {
+      if (col.formula && !allFormulas.some(f => f.field === col.field)) {
+        allFormulas.push({ field: col.field, formula: col.formula });
+      }
+    }
+
     // Apply formulas first
-    let result = this.formulas.length > 0 ? applyFormulas(this.rows, this.formulas) : [...this.rows];
+    let result = allFormulas.length > 0 ? applyFormulas(this.rows, allFormulas) : [...this.rows];
 
     // Apply quick search (global text filter across all columns)
     if (this._quickSearch.trim()) {
@@ -2745,6 +2753,7 @@ export class ZenttoGrid extends LitElement {
 
   private _handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      if (this._barcodeZoom) { this._barcodeZoom = null; return; }
       if (this._editingCell) { this._editingCell = null; return; }
       if (this._contextMenu) { this._closeContextMenu(); return; }
       if (this._headerMenu) { this._closeHeaderMenu(); return; }
