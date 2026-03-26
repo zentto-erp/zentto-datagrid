@@ -2,6 +2,34 @@
 
 All notable changes to `@zentto/datagrid` will be documented in this file.
 
+## [0.3.6] - 2026-03-26
+
+### Added
+- **Boolean rendering** — `type: 'boolean'` renders check (green) or X (muted) icon. Supports `true/false`, `1/0`, `-1/0`, `'S'/'N'`, `'yes'/'no'`
+- **Radio options** — `radioOptions` on ColumnDef renders visual radio buttons for multi-state fields. Clickable in edit mode, emits `cell-edit`
+  ```ts
+  { field: 'priority', header: 'Prioridad', radioOptions: [
+    { value: 'high', label: 'Alta', color: '#dc2626' },
+    { value: 'medium', label: 'Media', color: '#e67e22' },
+    { value: 'low', label: 'Baja', color: '#0d9668' },
+  ]}
+  ```
+- **Color type** — `type: 'color'` renders a circle swatch + hex text
+- **Percentage type** — `type: 'percentage'` renders a progress bar (green >75%, orange >50%, red <25%) + number
+
+## [0.3.5] - 2026-03-26
+
+### Added
+- **Create button** — `enable-create` shows a "Nuevo" button in the toolbar, emits `create-click` event. Customizable with `create-label` and `create-icon` props
+- **View toggles in configurator** — Each view (table, form, cards, kanban) can be toggled on/off individually from the settings panel
+- View buttons in toolbar conditioned by `show-view-table`, `show-view-form`, `show-view-cards`, `show-view-kanban` props
+
+## [0.3.4] - 2026-03-26
+
+### Fixed
+- **[object Object] in cells** — Values that are objects now extract `.label`, `.name`, `.text`, or `.value` instead of showing `[object Object]`
+- `_formatValue` handles object values gracefully
+
 ## [0.3.3] - 2026-03-26
 
 ### Added
