@@ -2,6 +2,25 @@
 
 All notable changes to `@zentto/datagrid` will be documented in this file.
 
+## [1.0.2] - 2026-03-26
+
+### Fixed
+- **Enter key in edit mode** — now moves right (next column) instead of down, so user sees the committed value
+- **Duplicate create button removed** — CRUD bar no longer shows "Agregar" button when `enable-create` is active in toolbar
+- **QR in Cards view** — only shows QR for columns explicitly marked with `barcode: 'qr'`, not by field name guessing
+- **QR double-click zoom** — QR in Cards view opens full-size modal on double-click (same as table view)
+
+### Improved
+- **Form view** — QR of first field in header, hover lift effect on field cards, larger title, navigation buttons with scale animation
+- **Cards view** — hover `translateY(-4px) scale(1.01)` with deep shadow, QR per card for barcode columns, dashed separators, 12px radius
+- **Kanban view** — hover lift on cards and columns, group total sum displayed in column header, subtitle field, primary color for values, max-height scroll
+
+## [1.0.1] - 2026-03-26
+
+### Fixed
+- Enter key in edit mode moves right instead of down
+- Removed duplicate create button from CRUD bar
+
 ## [1.0.0] - 2026-03-26
 
 ### Added

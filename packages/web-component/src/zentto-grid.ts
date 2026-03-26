@@ -3917,23 +3917,35 @@ onMounted(() => {
   private _renderFormView() {
     const dataRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
     const row = dataRows[this._formIndex];
-    if (!row) return html`<div style="padding:20px;text-align:center;color:var(--zg-text-muted)">${this._t('Sin datos', 'No data')}</div>`;
-    const cols = this._visibleColumns;
+    if (!row) return html`<div style="padding:40px;text-align:center;color:var(--zg-text-muted)">${this._iconHtml('search')}<br>${this._t('Sin datos', 'No data')}</div>`;
+    const cols = this._visibleColumns.filter(c => c.type !== 'actions');
+    const firstCol = cols[0];
+    const qrData = firstCol ? String(row[firstCol.field] ?? '') : '';
 
     return html`
-      <div class="zg-table-wrapper" style="padding:16px;overflow:auto">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--zg-border)">
-          <button class="zg-btn" @click=${() => { if (this._formIndex > 0) this._formIndex--; }} ?disabled=${this._formIndex === 0}>${this._iconHtml('chevronLeft')} ${this._t('Anterior', 'Previous')}</button>
-          <span style="font-size:13px;font-weight:600;color:var(--zg-text-secondary)">${this._formIndex + 1} / ${dataRows.length}</span>
-          <button class="zg-btn" @click=${() => { if (this._formIndex < dataRows.length - 1) this._formIndex++; }} ?disabled=${this._formIndex >= dataRows.length - 1}>${this._t('Siguiente', 'Next')} ${this._iconHtml('chevronRight')}</button>
+      <div class="zg-table-wrapper" style="padding:20px;overflow:auto">
+        <!-- Navigation + QR -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--zg-border)">
+          <button class="zg-btn" style="transition:transform 0.15s" @mouseenter=${(e: Event) => ((e.target as HTMLElement).style.transform = 'scale(1.05)')} @mouseleave=${(e: Event) => ((e.target as HTMLElement).style.transform = 'scale(1)')} @click=${() => { if (this._formIndex > 0) this._formIndex--; }} ?disabled=${this._formIndex === 0}>${this._iconHtml('chevronLeft')} ${this._t('Anterior', 'Previous')}</button>
+          <div style="display:flex;align-items:center;gap:12px">
+            ${qrData ? html`<div style="opacity:0.7">${unsafeHTML(generateQrSvg(qrData, 40))}</div>` : nothing}
+            <div style="text-align:center">
+              <div style="font-size:18px;font-weight:700;color:var(--zg-text)">${firstCol ? this._formatValue(row[firstCol.field], firstCol) : ''}</div>
+              <div style="font-size:12px;color:var(--zg-text-muted)">${this._formIndex + 1} ${this._t('de', 'of')} ${dataRows.length}</div>
+            </div>
+          </div>
+          <button class="zg-btn" style="transition:transform 0.15s" @mouseenter=${(e: Event) => ((e.target as HTMLElement).style.transform = 'scale(1.05)')} @mouseleave=${(e: Event) => ((e.target as HTMLElement).style.transform = 'scale(1)')} @click=${() => { if (this._formIndex < dataRows.length - 1) this._formIndex++; }} ?disabled=${this._formIndex >= dataRows.length - 1}>${this._t('Siguiente', 'Next')} ${this._iconHtml('chevronRight')}</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+        <!-- Fields grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
           ${cols.map(col => {
             const val = row[col.field];
             return html`
-              <div style="display:flex;flex-direction:column;gap:2px;padding:8px;border-radius:var(--zg-radius);border:1px solid var(--zg-border)">
-                <span style="font-size:10px;font-weight:600;color:var(--zg-text-muted);text-transform:uppercase;letter-spacing:0.05em">${col.header || col.field}</span>
-                <span style="font-size:13px;color:var(--zg-text)">${this._renderCellContent(val, col, row)}</span>
+              <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:8px;border:1px solid var(--zg-border);background:var(--zg-bg);transition:transform 0.2s,box-shadow 0.2s;cursor:default"
+                   @mouseenter=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(-2px)'; el.style.boxShadow = 'var(--zg-shadow-md)'; }}
+                   @mouseleave=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(0)'; el.style.boxShadow = 'none'; }}>
+                <span style="font-size:10px;font-weight:700;color:var(--zg-text-muted);text-transform:uppercase;letter-spacing:0.06em">${col.header || col.field}</span>
+                <span style="font-size:14px;color:var(--zg-text);font-weight:500">${this._renderCellContent(val, col, row)}</span>
               </div>
             `;
           })}
@@ -3946,28 +3958,42 @@ onMounted(() => {
 
   private _renderCardsView() {
     const dataRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
-    const cols = this._visibleColumns.slice(0, 6); // Show max 6 fields per card
+    const cols = this._visibleColumns.filter(c => c.type !== 'actions');
     const titleCol = cols[0];
     const subtitleCol = cols[1];
+    const dataCols = cols.slice(2, 7);
+    // Find columns with barcode: 'qr' — only show QR for fields explicitly marked
+    const qrCol = cols.find(c => c.barcode === 'qr');
 
     return html`
       <div class="zg-table-wrapper" style="padding:12px;overflow:auto">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
-          ${dataRows.map((row, idx) => html`
-            <div style="border:1px solid var(--zg-border);border-radius:var(--zg-radius-lg);padding:12px;background:var(--zg-bg);cursor:pointer;transition:box-shadow 0.15s"
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+          ${dataRows.map((row, idx) => {
+            const qrData = qrCol ? String(row[qrCol.field] ?? '') : '';
+            return html`
+            <div style="border:1px solid var(--zg-border);border-radius:12px;padding:0;background:var(--zg-bg);cursor:pointer;transition:transform 0.2s ease,box-shadow 0.25s ease;overflow:hidden"
                  @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: idx })}
-                 @mouseenter=${(e: Event) => (e.target as HTMLElement).style.boxShadow = 'var(--zg-shadow-md)'}
-                 @mouseleave=${(e: Event) => (e.target as HTMLElement).style.boxShadow = 'none'}>
-              ${titleCol ? html`<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--zg-text)">${this._renderCellContent(row[titleCol.field], titleCol, row)}</div>` : nothing}
-              ${subtitleCol ? html`<div style="font-size:12px;color:var(--zg-text-secondary);margin-bottom:8px">${this._renderCellContent(row[subtitleCol.field], subtitleCol, row)}</div>` : nothing}
-              ${cols.slice(2).map(col => html`
-                <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--zg-border)">
-                  <span style="color:var(--zg-text-muted)">${col.header || col.field}</span>
-                  <span style="color:var(--zg-text);font-weight:500">${this._renderCellContent(row[col.field], col, row)}</span>
+                 @mouseenter=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(-4px) scale(1.01)'; el.style.boxShadow = '0 12px 28px rgba(0,0,0,0.12)'; }}
+                 @mouseleave=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(0) scale(1)'; el.style.boxShadow = 'none'; }}>
+              <!-- Card header -->
+              <div style="padding:12px 14px 8px;display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid var(--zg-border)">
+                <div style="flex:1;min-width:0">
+                  ${titleCol ? html`<div style="font-weight:700;font-size:14px;color:var(--zg-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._renderCellContent(row[titleCol.field], titleCol, row)}</div>` : nothing}
+                  ${subtitleCol ? html`<div style="font-size:12px;color:var(--zg-text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this._renderCellContent(row[subtitleCol.field], subtitleCol, row)}</div>` : nothing}
                 </div>
-              `)}
+                ${qrData ? html`<div style="flex-shrink:0;opacity:0.8;transition:opacity 0.2s;cursor:pointer" title="${this._t('Doble-click para ampliar', 'Double-click to zoom')}" @mouseenter=${(e: Event) => ((e.currentTarget as HTMLElement).style.opacity = '1')} @mouseleave=${(e: Event) => ((e.currentTarget as HTMLElement).style.opacity = '0.8')} @dblclick=${(e: Event) => { e.stopPropagation(); this._barcodeZoom = { data: qrData, type: 'qr' }; }}>${unsafeHTML(generateQrSvg(qrData, 44))}</div>` : nothing}
+              </div>
+              <!-- Card body -->
+              <div style="padding:8px 14px 12px">
+                ${dataCols.map(col => html`
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px dashed var(--zg-border)">
+                    <span style="color:var(--zg-text-muted);font-size:11px">${col.header || col.field}</span>
+                    <span style="color:var(--zg-text);font-weight:600">${this._renderCellContent(row[col.field], col, row)}</span>
+                  </div>
+                `)}
+              </div>
             </div>
-          `)}
+          `;})}
         </div>
       </div>
     `;
@@ -3988,26 +4014,38 @@ onMounted(() => {
       groups.get(key)!.push(row);
     }
 
-    const titleCol = this._visibleColumns.find(c => c.field !== field && c.type !== 'number');
+    const titleCol = this._visibleColumns.find(c => c.field !== field && c.type !== 'number' && c.type !== 'actions');
     const valueCol = this._visibleColumns.find(c => c.type === 'number' || c.currency);
+    const subtitleCol = this._visibleColumns.find(c => c.field !== field && c.field !== titleCol?.field && c.type !== 'number' && c.type !== 'actions');
 
     return html`
       <div class="zg-table-wrapper" style="padding:12px;overflow-x:auto;overflow-y:auto">
-        <div style="display:flex;gap:10px;min-width:max-content">
+        <div style="display:flex;gap:12px;min-width:max-content">
           ${[...groups.entries()].map(([key, rows]) => {
             const statusColor = col?.statusColors?.[key] || 'default';
+            const groupTotal = valueCol ? rows.reduce((s, r) => s + (Number(r[valueCol.field]) || 0), 0) : 0;
             return html`
-              <div style="min-width:220px;max-width:280px;flex:1;background:var(--zg-surface);border-radius:var(--zg-radius-lg);border:1px solid var(--zg-border);display:flex;flex-direction:column">
-                <div style="padding:8px 12px;font-weight:700;font-size:12px;border-bottom:1px solid var(--zg-border);display:flex;align-items:center;gap:6px">
-                  <span class="zg-chip zg-chip--${statusColor} zg-chip--filled" style="font-size:10px;height:18px">${key || this._t('Sin estado', 'No status')}</span>
-                  <span style="color:var(--zg-text-muted);font-size:11px">${rows.length}</span>
+              <div style="min-width:240px;max-width:300px;flex:1;background:var(--zg-surface);border-radius:12px;border:1px solid var(--zg-border);display:flex;flex-direction:column;transition:box-shadow 0.2s"
+                   @mouseenter=${(e: Event) => ((e.currentTarget as HTMLElement).style.boxShadow = 'var(--zg-shadow-sm)')}
+                   @mouseleave=${(e: Event) => ((e.currentTarget as HTMLElement).style.boxShadow = 'none')}>
+                <!-- Column header -->
+                <div style="padding:10px 14px;border-bottom:1px solid var(--zg-border);display:flex;align-items:center;justify-content:space-between">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span class="zg-chip zg-chip--${statusColor} zg-chip--filled" style="font-size:11px;height:20px">${key || this._t('Sin estado', 'No status')}</span>
+                    <span style="color:var(--zg-text-muted);font-size:12px;font-weight:600">${rows.length}</span>
+                  </div>
+                  ${valueCol && groupTotal > 0 ? html`<span style="font-size:11px;font-weight:700;color:var(--zg-text-secondary)">${this._formatValue(groupTotal, valueCol)}</span>` : nothing}
                 </div>
-                <div style="padding:6px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1">
+                <!-- Cards -->
+                <div style="padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;max-height:60vh">
                   ${rows.map(row => html`
-                    <div style="background:var(--zg-bg);border:1px solid var(--zg-border);border-radius:var(--zg-radius);padding:8px;cursor:pointer;font-size:12px"
-                         @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: dataRows.indexOf(row) })}>
-                      ${titleCol ? html`<div style="font-weight:600;margin-bottom:4px">${row[titleCol.field]}</div>` : nothing}
-                      ${valueCol ? html`<div style="color:var(--zg-text-secondary)">${this._formatValue(row[valueCol.field], valueCol)}</div>` : nothing}
+                    <div style="background:var(--zg-bg);border:1px solid var(--zg-border);border-radius:8px;padding:10px;cursor:pointer;font-size:12px;transition:transform 0.15s ease,box-shadow 0.2s ease"
+                         @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: dataRows.indexOf(row) })}
+                         @mouseenter=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; }}
+                         @mouseleave=${(e: Event) => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(0)'; el.style.boxShadow = 'none'; }}>
+                      ${titleCol ? html`<div style="font-weight:700;font-size:13px;margin-bottom:2px;color:var(--zg-text)">${row[titleCol.field]}</div>` : nothing}
+                      ${subtitleCol ? html`<div style="font-size:11px;color:var(--zg-text-muted);margin-bottom:6px">${row[subtitleCol.field]}</div>` : nothing}
+                      ${valueCol ? html`<div style="font-size:13px;font-weight:700;color:var(--zg-primary)">${this._formatValue(row[valueCol.field], valueCol)}</div>` : nothing}
                     </div>
                   `)}
                 </div>
