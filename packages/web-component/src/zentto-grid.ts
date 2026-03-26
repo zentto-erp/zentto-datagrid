@@ -345,6 +345,9 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'enable-comments' }) enableComments = false;
   @property({ attribute: false }) cellNotes: Record<string, string> = {};
 
+  // ─── v0.8 — AI Columns ──────────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-ai' }) enableAi = true;
+
   // ─── v0.8 — Audit Trail ──────────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-audit' }) enableAudit = false;
   @property({ attribute: false }) auditUser?: string;
@@ -2547,7 +2550,7 @@ export class ZenttoGrid extends LitElement {
     }
 
     // v0.8 — AI Column (Generative)
-    if (col.ai && !isTotals) {
+    if (col.ai && !isTotals && this.enableAi) {
       const rowKey = this._getRowKey(row);
       const cacheKey = `${rowKey}_${col.field}`;
 
@@ -3584,6 +3587,7 @@ export class ZenttoGrid extends LitElement {
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">v0.8 — Premium</div>
       ${this._renderConfigSwitch(this._t('Auditoria', 'Audit trail'), this.enableAudit, v => { this.enableAudit = v; }, this._t('Rastrea quien cambio que y cuando. Punto azul en celdas editadas', 'Track who changed what and when. Blue dot on edited cells'))}
+      ${this._renderConfigSwitch(this._t('Columnas IA', 'AI Columns'), this.enableAi, v => { this.enableAi = v; }, this._t('Activar/desactivar columnas generativas con IA. Requiere API key configurada', 'Enable/disable AI generative columns. Requires API key configured'))}
     `;
   }
 
