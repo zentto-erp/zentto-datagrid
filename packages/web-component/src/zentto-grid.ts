@@ -2845,20 +2845,17 @@ export class ZenttoGrid extends LitElement {
         <!-- Rich Toolbar -->
         ${this.enableToolbar ? this._renderToolbar(totalRows) : nothing}
 
-        <!-- CRUD bar (when editing enabled) -->
-        ${this.enableEditing ? html`
+        <!-- CRUD bar (when editing enabled and create or delete needed) -->
+        ${this.enableEditing && (this.enableCreate || selCount > 0) ? html`
           <div class="zg-crud-bar">
-            <button class="zg-btn-primary" @click=${() => this.addRow()}>${this._iconHtml('add')} ${this._t('Agregar', 'Add')}</button>
+            ${this.enableCreate ? html`
+              <button class="zg-btn-primary" @click=${() => this.addRow()}>${this._iconHtml('add')} ${this.createLabel || this._t('Agregar', 'Add')}</button>
+            ` : nothing}
             ${selCount > 0 ? html`
               <button class="zg-btn-danger" @click=${() => this.deleteSelected()}>
                 ${this._iconHtml('delete')} ${this._t('Eliminar', 'Delete')} (${selCount})
               </button>
             ` : nothing}
-            <span class="zg-toolbar-sep"></span>
-            <button class="zg-btn-icon" @click=${this._handleImportClick} title="${this._t('Importar Excel/CSV/JSON', 'Import Excel/CSV/JSON')}">
-              ${this._iconHtml('import')} ${this._t('Importar', 'Import')}
-            </button>
-            <input type="file" class="zg-import-file" accept=".csv,.json,.xlsx,.xls" @change=${this._handleFileImport} />
           </div>
         ` : nothing}
 
