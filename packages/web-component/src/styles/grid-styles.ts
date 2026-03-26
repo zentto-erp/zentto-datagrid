@@ -1628,6 +1628,46 @@ export const gridStyles = css`
     outline-offset: 2px;
   }
 
+
+  .zg-container:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-page-size:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-expand-chevron:focus-visible,
+  .zg-group-chevron:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .zg-td--active:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-btn-danger:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-context-item:focus-visible,
+  .zg-header-menu-item:focus-visible {
+    background: var(--zg-hover-bg);
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-density-item:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
   /* Skip link for screen readers */
   .zg-sr-only {
     position: absolute;
