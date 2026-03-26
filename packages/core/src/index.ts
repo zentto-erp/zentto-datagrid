@@ -23,6 +23,12 @@ export type {
   ActionButtonDef,
   CrudConfig,
   FormulaDefinition,
+  ConditionalFormatRule,
+  ValidationRule,
+  ChartConfig,
+  ChartType,
+  PrintOptions,
+  NoteChangeDetail,
 } from './types';
 
 // Data operations
@@ -57,8 +63,18 @@ export type { CellAddress, SelectionRange, NormalizedRange } from './selection/r
 export { parseClipboardData, applyPasteData } from './selection/paste';
 export type { PasteData } from './selection/paste';
 
+// Batch Edit
+export { applyBatchEdit } from './data/batch-edit';
+export type { BatchChange } from './data/batch-edit';
+
 // Formulas
 export { evaluateFormula, applyFormulas } from './data/formula';
+
+// Conditional Formatting
+export { evaluateConditionalFormat } from './data/conditional-format';
+
+// Validation
+export { validateValue } from './data/validation';
 
 // Virtual Scroll
 export { calculateVirtualScroll, calculateDynamicVirtualScroll } from './virtualization/virtual-scroll';
@@ -75,3 +91,28 @@ export type { SparklineType, SparklineConfig, SparklineData } from './data/spark
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';
 export type { GridLayout } from './layout/persistence';
+
+// v0.5.0 — Tree Data
+export { buildTreeRows, getDescendantIds } from './data/tree';
+export type { TreeNode } from './data/tree';
+
+// v0.5.0 — Cell Merge
+export { computeMergeMap } from './data/merge';
+export type { CellMergeInfo, MergeMap } from './data/merge';
+
+// v0.8.0 — Audit Trail
+export { AuditTrail } from './data/audit';
+export type { AuditEntry } from './data/audit';
+
+// v0.8.0 — Barcode / QR
+export { generateQrSvg, generateBarcodeSvg } from './visualization/barcode';
+
+// v0.8.0 — Status Timeline
+export { generateTimelineSvg } from './visualization/timeline';
+export type { TimelineEntry } from './visualization/timeline';
+
+// v0.7.0 — Charts (SVG, zero dependencies)
+export { generateChartSvg, detectNumericFields } from './visualization/charts';
+
+// v0.7.0 — Print / PDF Layout
+export { generatePrintHtml } from './export/print';

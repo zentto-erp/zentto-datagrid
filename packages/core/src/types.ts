@@ -68,6 +68,8 @@ export interface ColumnDef {
   // ─── Aggregation ──────────────────────────────────────
   /** Aggregation for totals row */
   aggregation?: AggregationType;
+  /** Custom label for totals row (e.g. "Promedio", "Registros") */
+  aggregationLabel?: string;
 
   // ─── Currency ─────────────────────────────────────────
   /** ISO 4217 currency code or true for default */
@@ -128,6 +130,47 @@ export interface ColumnDef {
   sparklineField?: string;
   /** Sparkline color override */
   sparklineColor?: string;
+
+  // ─── v0.4.0 — Data Validation & Formatting ─────────
+  /** Conditional formatting rules — evaluated in order, styles merged */
+  conditionalFormat?: ConditionalFormatRule[];
+  /** Data validation rule for inline editing */
+  validation?: ValidationRule;
+  /** Dropdown options for cell editing */
+  dropdown?: string[] | { value: string; label: string; color?: string }[];
+  /** Formula expression: e.g. '=({precioVenta}-{precioCompra})/{precioCompra}*100' */
+  formula?: string;
+
+  // ─── v0.5.0 — Cell Merge ──────────────────────────────────
+  /** Auto-merge consecutive cells with the same value in this column */
+  merge?: boolean;
+
+  // ─── v0.8.0 — Barcode / QR ──────────────────────────
+  /** Render cell value as barcode/QR SVG */
+  barcode?: 'qr' | 'code128' | 'ean13' | 'code39';
+
+  // ─── v0.8.0 — Status Timeline ─────────────────────
+  /** Render a mini horizontal timeline from an array field */
+  timeline?: boolean;
+  /** Field containing array of { status, date, label? } */
+  timelineField?: string;
+
+  // ─── v0.8.0 — AI Column (Generative) ──────────────
+  /** AI-generated column configuration */
+  ai?: {
+    prompt: string;
+    fields: string[];
+    apiUrl?: string;
+    cache?: boolean;
+  };
+
+  // ─── v0.8.0 — Cell Hyperlinks ─────────────────────
+  /** Render cell value as clickable hyperlink */
+  hyperlink?: boolean;
+  /** URL pattern with {field} placeholders, e.g. '/products/{id}' */
+  hyperlinkPattern?: string;
+  /** Link target */
+  hyperlinkTarget?: '_blank' | '_self';
 }
 
 /** Column group (multi-level headers) */
@@ -135,6 +178,8 @@ export interface ColumnGroup {
   groupId: string;
   header: string;
   children: string[];
+  /** Allow collapsing this group to show only the first column */
+  collapsible?: boolean;
 }
 
 /** Pivot configuration */
@@ -191,6 +236,18 @@ export interface GridEvents {
   'redo': { action: unknown };
   'paste': { changes: unknown[]; rows: number; cols: number };
   'range-select': { startRow: number; endRow: number; startCol: number; endCol: number };
+  'search-change': { query: string };
+  'group-change': { groupFields: string[]; activeField: string };
+  'batch-edit': { changes: { rowKey: string; field: string; oldValue: unknown; newValue: unknown }[] };
+  'load-more': { page: number };
+  'server-request': {
+    page: number;
+    pageSize: number;
+    sorts: SortEntry[];
+    filters: FilterRule[];
+    search: string;
+    groupField: string;
+  };
 }
 
 /** Filter panel field definition — declared from React, rendered inside the grid toolbar */
@@ -251,6 +308,28 @@ export interface FormulaDefinition {
   field: string;
   /** Formula expression: =SUM(price), =A*B, ={field1}*{field2}, =ROUND({total}/1.16, 2) */
   formula: string;
+}
+
+/** Conditional formatting rule */
+export interface ConditionalFormatRule {
+  condition: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'between' | 'contains' | 'isEmpty' | 'isNotEmpty';
+  value?: unknown;
+  style: Record<string, string>;
+}
+
+/** Validation rule for inline editing */
+export interface ValidationRule {
+  type?: 'email' | 'number' | 'date' | 'regex' | 'custom';
+  required?: boolean;
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  after?: string;
+  before?: string;
+  message?: string;
+  validate?: (value: unknown, row: GridRow) => string | null;
 }
 
 /** Full grid options (props for the web component) */
@@ -337,4 +416,51 @@ export interface GridOptions {
 
   // ─── Range Selection ───────────────────
   enableRangeSelection?: boolean;
+
+  // ─── v0.7 — Charts ────────────────────
+  enableCharts?: boolean;
+
+  // ─── v0.7 — Print ─────────────────────
+  enablePrint?: boolean;
+
+  // ─── v0.7 — Cell Comments ─────────────
+  enableComments?: boolean;
+}
+
+// ─── v0.7 — Chart Types ─────────────────────────────────
+
+/** Chart type for built-in SVG charts */
+export type ChartType = 'bar' | 'line' | 'pie' | 'area' | 'donut';
+
+/** Configuration for generating a chart from grid data */
+export interface ChartConfig {
+  type: ChartType;
+  title?: string;
+  width?: number;
+  height?: number;
+  labelField: string;
+  valueFields: string[];
+  colors?: string[];
+}
+
+// ─── v0.7 — Print Options ───────────────────────────────
+
+/** Options for print/PDF layout */
+export interface PrintOptions {
+  title?: string;
+  orientation?: 'portrait' | 'landscape';
+  showTotals?: boolean;
+  headerRepeat?: boolean;
+  fontSize?: number;
+  pageSize?: 'A4' | 'letter';
+}
+
+// ─── v0.7 — Cell Note Event ─────────────────────────────
+
+/** Event detail for cell note changes */
+export interface NoteChangeDetail {
+  rowKey: string;
+  field: string;
+  note: string;
+  action: 'add' | 'edit' | 'delete';
 }

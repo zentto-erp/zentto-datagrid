@@ -236,6 +236,12 @@ export class ZenttoGrid extends LitElement {
       link:       s('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
       attachment: s('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
       star:       s('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+      chart:      s('<path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>'),
+      note:       s('<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'),
+      sparkle:    s('<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M18 14l.75 2.25L21 17l-2.25.75L18 20l-.75-2.25L15 17l2.25-.75L18 14z"/>', ' fill="currentColor" stroke="none"'),
+      barcodeIcon:s('<rect x="3" y="4" width="2" height="16"/><rect x="7" y="4" width="1" height="16"/><rect x="10" y="4" width="3" height="16"/><rect x="15" y="4" width="1" height="16"/><rect x="18" y="4" width="2" height="16"/>', ' fill="currentColor" stroke="none"'),
+      timelineIcon:s('<line x1="3" y1="12" x2="21" y2="12"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>', ' fill="currentColor"'),
+      auditIcon:  s('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>'),
     };
     const iconStr = this.icons[name] ?? defaults[name] ?? '';
     return iconStr;
@@ -287,6 +293,30 @@ export class ZenttoGrid extends LitElement {
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
 
+  // --- v0.7 --- Charts ------------------------------------------------
+  @property({ type: Boolean, attribute: 'enable-charts' }) enableCharts = false;
+
+  // --- v0.7 --- Print -------------------------------------------------
+  @property({ type: Boolean, attribute: 'enable-print' }) enablePrint = false;
+  @property({ type: String, attribute: 'print-title' }) printTitle = '';
+
+  // --- v0.7 --- Cell Comments/Notes ------------------------------------
+  @property({ type: Boolean, attribute: 'enable-comments' }) enableComments = false;
+  @property({ attribute: false }) cellNotes: Record<string, string> = {};
+
+  // ─── v0.5 — Tree Data (Hierarchical) ──────────────────────────
+  @property({ type: Boolean, attribute: 'enable-tree-data' }) enableTreeData = false;
+  @property({ type: String, attribute: 'tree-id-field' }) treeIdField = 'id';
+  @property({ type: String, attribute: 'tree-parent-field' }) treeParentField = 'parentId';
+  @property({ type: Number, attribute: 'tree-indent' }) treeIndent = 20;
+
+  // ─── v0.5 — Row Pinning (Top/Bottom) ─────────────────────────
+  @property({ attribute: false }) pinnedRows: { top?: GridRow[]; bottom?: GridRow[] } = {};
+
+  // ─── v0.5 — Frozen/Split Panes ───────────────────────────────
+  @property({ type: Number, attribute: 'freeze-rows' }) freezeRows = 0;
+  @property({ type: Number, attribute: 'freeze-cols' }) freezeCols = 0;
+
   // ─── Internal state ───────────────────────────────────────────
 
   @state() private _sorts: SortEntry[] = [];
@@ -298,6 +328,12 @@ export class ZenttoGrid extends LitElement {
   @state() private _findQuery = '';
   @state() private _findMatches: FindMatch[] = [];
   @state() private _findIdx = 0;
+
+  // v0.5 — Tree Data state
+  @state() private _treeExpanded: Set<string> = new Set();
+
+  // v0.5 — Collapsible Column Groups state
+  @state() private _collapsedGroups: Set<string> = new Set();
 
   // Master-Detail state
   @state() private _expandedRows: Set<string> = new Set();
@@ -366,6 +402,16 @@ export class ZenttoGrid extends LitElement {
   @state() private _datePickerOpen = false;
   @state() private _datePickerMonth = new Date();
 
+  // v0.7 — Charts panel state
+  @state() private _chartOpen = false;
+  @state() private _chartType: 'bar' | 'line' | 'pie' | 'area' | 'donut' = 'bar';
+  @state() private _chartLabelField = '';
+  @state() private _chartValueFields: string[] = [];
+
+  // v0.7 — Cell note editing state
+  @state() private _noteMenu: { x: number; y: number; rowKey: string; field: string } | null = null;
+  @state() private _noteEditing: { rowKey: string; field: string; text: string } | null = null;
+
   // ─── i18n helper ────────────────────────────────────────────
   /** i18n helper — uses locale prefix to pick translation. Falls back to English. */
   private _t(es: string, en: string): string {
@@ -376,6 +422,9 @@ export class ZenttoGrid extends LitElement {
   // ─── Computed data ────────────────────────────────────────────
 
   private get _filteredRows(): GridRow[] {
+    // Server-side mode: skip all local filtering
+    if (this.paginationMode === 'server') return [...this.rows];
+
     // Apply formulas first
     let result = this.formulas.length > 0 ? applyFormulas(this.rows, this.formulas) : [...this.rows];
 
@@ -425,14 +474,26 @@ export class ZenttoGrid extends LitElement {
   }
 
   private get _sortedRows(): GridRow[] {
+    // Server-side mode: skip local sorting
+    if (this.paginationMode === 'server') return this._filteredRows;
+
     return sortRows(this._filteredRows, this._sorts);
   }
 
   private get _paginatedResult() {
+    // Server-side mode: data already paginated, use totalRows for pagination info
+    if (this.paginationMode === 'server') {
+      const totalPages = Math.max(1, Math.ceil(this.totalRows / this._pageSize));
+      return { rows: this._sortedRows, totalRows: this.totalRows, totalPages, page: this._page, pageSize: this._pageSize };
+    }
+
     return paginateRows(this._sortedRows, { page: this._page, pageSize: this._pageSize });
   }
 
   private get _groupedRows(): GridRow[] {
+    // Server-side mode: skip local grouping
+    if (this.paginationMode === 'server') return this._sortedRows;
+
     if (this.enableGrouping && this.groupField) {
       const grouped = groupRows(this._sortedRows, {
         field: this.groupField,
@@ -467,6 +528,15 @@ export class ZenttoGrid extends LitElement {
   }
 
   private get _displayRows(): GridRow[] {
+    // Server-side mode: display rows as provided by server
+    if (this.paginationMode === 'server') {
+      if (this.showTotals) {
+        const totals = computeTotals(this.rows, this.columns, this.totalsLabel);
+        return [...this.rows, totals];
+      }
+      return [...this.rows];
+    }
+
     // Pivot mode overrides everything
     if (this._pivotResult) {
       return this._pivotResult.rows;
@@ -486,11 +556,23 @@ export class ZenttoGrid extends LitElement {
     } else {
       source = this._paginatedResult.rows;
     }
+    // v0.5 — Tree Data: convert flat rows to hierarchical visible rows
+    if (this.enableTreeData) {
+      source = buildTreeRows(source, this.treeIdField, this.treeParentField, this._treeExpanded);
+    }
+
     if (this.showTotals && !(this.enableGrouping && this.groupField) && !this.enableVirtualScroll) {
       const totals = computeTotals(this._sortedRows, this.columns, this.totalsLabel);
       return [...source, totals];
     }
     return source;
+  }
+
+  // v0.5 — Merge map (computed from display rows)
+  private get _mergeMap(): MergeMap {
+    const mergeCols = this.columns.filter(c => c.merge);
+    if (mergeCols.length === 0) return {};
+    return computeMergeMap(this._displayRows, this.columns);
   }
 
   // ─── Active filter count ────────────────────────────────────────
@@ -517,6 +599,15 @@ export class ZenttoGrid extends LitElement {
       if (c.field.startsWith('__')) return false;
       if (this._hiddenColumns.has(c.field)) return false;
       if (isMobile && c.mobileHide) return false;
+
+      // v0.5 — Collapsible column groups: hide children (except first) when collapsed
+      if (c.columnGroupId) {
+        const group = this.columnGroups.find(g => g.groupId === c.columnGroupId);
+        if (group?.collapsible && this._collapsedGroups.has(group.groupId)) {
+          if (group.children[0] !== c.field) return false;
+        }
+      }
+
       return true;
     });
   }
@@ -541,6 +632,83 @@ export class ZenttoGrid extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
+  /** Collect current header filter rules as FilterRule[] */
+  private _collectFilterRules(): FilterRule[] {
+    const rules: FilterRule[] = [];
+    for (const [field, val] of Object.entries(this._headerFilters)) {
+      if (!val) continue;
+      const col = this.columns.find(c => c.field === field);
+      if (col?.type === 'number') {
+        const match = val.match(/^([><=!]+)?\s*(.+)$/);
+        if (match) {
+          const op = match[1] || '=';
+          const opMap: Record<string, string> = { '>'  : 'gt', '>=' : 'gte', '<'  : 'lt', '<=' : 'lte', '='  : 'equals', '!=' : 'notEquals' };
+          rules.push({ field, operator: (opMap[op] || 'gte') as FilterRule['operator'], value: Number(match[2]) });
+        }
+      } else {
+        rules.push({ field, operator: 'contains', value: val });
+      }
+    }
+    return rules;
+  }
+
+  /** Emit a consolidated server-request event with all current state */
+  private _emitServerRequest() {
+    if (this.paginationMode !== 'server') return;
+    this._dispatchGridEvent('server-request', {
+      page: this._page,
+      pageSize: this._pageSize,
+      sorts: this._sorts,
+      filters: this._collectFilterRules(),
+      search: this._quickSearch,
+      groupField: this.groupField || '',
+    });
+  }
+
+  // ─── v0.5 — Tree Data helpers ──────────────────────────────────
+
+  private _toggleTreeNode(nodeId: string) {
+    const next = new Set(this._treeExpanded);
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else {
+      next.add(nodeId);
+    }
+    this._treeExpanded = next;
+    this._dispatchGridEvent('tree-toggle', { nodeId, expanded: next.has(nodeId) });
+  }
+
+  private _treeIcon(row: GridRow): string {
+    const hasChildren = row['__zentto_tree_has_children__'];
+    const isExpanded = row['__zentto_tree_expanded__'];
+    if (!hasChildren) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
+    if (isExpanded) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>`;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg>`;
+  }
+
+  private _treeChevron(row: GridRow): string {
+    const hasChildren = row['__zentto_tree_has_children__'];
+    if (!hasChildren) return '<span style="display:inline-block;width:16px"></span>';
+    const isExpanded = row['__zentto_tree_expanded__'];
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.15s;transform:rotate(${isExpanded ? '90' : '0'}deg);cursor:pointer"><polyline points="9 18 15 12 9 6"/></svg>`;
+  }
+
+  // ─── v0.5 — Collapsible Column Groups ─────────────────────────
+
+  private _toggleColumnGroup(groupId: string) {
+    const next = new Set(this._collapsedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    this._collapsedGroups = next;
+  }
+
   // ─── Sort handler ─────────────────────────────────────────────
 
   private _handleSort(field: string) {
@@ -556,6 +724,7 @@ export class ZenttoGrid extends LitElement {
       this._sorts = [];
     }
     this._dispatchGridEvent('sort-change', { sorts: this._sorts });
+    this._emitServerRequest();
   }
 
   private _getSortIcon(field: string): string {
@@ -569,16 +738,20 @@ export class ZenttoGrid extends LitElement {
   private _handlePageSizeChange(e: Event) {
     this._pageSize = Number((e.target as HTMLSelectElement).value);
     this._page = 0;
+    this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize });
+    this._emitServerRequest();
   }
 
-  private _prevPage() { if (this._page > 0) this._page--; }
-  private _nextPage() { if (this._page < this._paginatedResult.totalPages - 1) this._page++; }
+  private _prevPage() { if (this._page > 0) { this._page--; this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize }); this._emitServerRequest(); } }
+  private _nextPage() { if (this._page < this._paginatedResult.totalPages - 1) { this._page++; this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize }); this._emitServerRequest(); } }
 
   // ─── Header filters ──────────────────────────────────────────
 
   private _handleFilterChange(field: string, value: string) {
     this._headerFilters = { ...this._headerFilters, [field]: value };
     this._page = 0;
+    this._dispatchGridEvent('filter-change', { filters: this._collectFilterRules() });
+    this._emitServerRequest();
   }
 
   // ─── Find ─────────────────────────────────────────────────────
@@ -973,6 +1146,14 @@ export class ZenttoGrid extends LitElement {
     else if (key === 'ArrowLeft') { e.preventDefault(); this._moveActiveCell(0, -1); }
     else if (key === 'Tab') { e.preventDefault(); this._moveActiveCell(0, e.shiftKey ? -1 : 1); }
     else if (key === 'Enter') {
+
+    // v0.8 — Audit trail
+    if (this.enableAudit) {
+      const auditEntry: AuditEntry = { field, rowKey, oldValue, newValue, user: this.auditUser || 'unknown', timestamp: Date.now() };
+      this._auditTrail.record(auditEntry);
+      this._dispatchGridEvent('audit-change', { entry: auditEntry, history: this._auditTrail.getHistory(rowKey, field) });
+      this.requestUpdate();
+    }
       e.preventDefault();
       if (this.enableEditing) {
         // In edit mode: Enter starts editing the active cell
@@ -1780,6 +1961,25 @@ export class ZenttoGrid extends LitElement {
     this._dispatchGridEvent('paste', { changes, rows: pasteData.rows, cols: pasteData.cols });
   }
 
+  // ─── v0.4 — Dropdown label renderer ──────────────────────────
+
+  private _renderDropdownLabel(val: unknown, col: ColumnDef) {
+    if (!col.dropdown) return html`${String(val ?? '')}`;
+    const options = Array.isArray(col.dropdown) ? col.dropdown : [];
+    const strVal = String(val ?? '');
+    for (const opt of options) {
+      const oV = typeof opt === 'string' ? opt : opt.value;
+      const oL = typeof opt === 'string' ? opt : opt.label;
+      const oC = typeof opt === 'object' ? opt.color : undefined;
+      if (oV === strVal) {
+        return oC
+          ? html`<span><span class="zg-dropdown-color" style="background:${oC}"></span>${oL}</span>`
+          : html`${oL}`;
+      }
+    }
+    return html`${strVal}`;
+  }
+
   // ─── v0.2 — Sparkline renderer ─────────────────────────────
 
   private _renderSparkline(val: unknown, col: ColumnDef): ReturnType<typeof html> | typeof nothing {
@@ -2008,7 +2208,72 @@ export class ZenttoGrid extends LitElement {
       return html`<a class="zg-link" href="${href}" target="${col.linkTarget || '_blank'}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
     }
 
-    return html`${this._formatValue(val, col, isTotals)}`;
+    // v0.8 — Barcode / QR
+    if (col.barcode && val != null && !isTotals) {
+      const data = String(val);
+      if (data) {
+        const svg = col.barcode === 'qr'
+          ? generateQrSvg(data, 32)
+          : generateBarcodeSvg(data, col.barcode, 120, 28);
+        return html`<span class="zg-barcode-cell" title="${data}">${unsafeHTML(svg)}</span>`;
+      }
+    }
+
+    // v0.8 — Status Timeline
+    if (col.timeline && !isTotals) {
+      const timelineData = (col.timelineField ? row[col.timelineField] : val) as TimelineEntry[] | undefined;
+      if (Array.isArray(timelineData) && timelineData.length > 0) {
+        const svg = generateTimelineSvg(timelineData, 120);
+        return html`<span class="zg-timeline-cell" title="${timelineData.map(e => `${e.status}: ${e.date}`).join(' → ')}">${unsafeHTML(svg)}</span>`;
+      }
+      return html`<span style="color:var(--zg-text-muted)">—</span>`;
+    }
+
+    // v0.8 — AI Column (Generative)
+    if (col.ai && !isTotals) {
+      const rowKey = this._getRowKey(row);
+      const cacheKey = `${rowKey}_${col.field}`;
+
+      // Check external aiResults first
+      if (this.aiResults[cacheKey]) {
+        return html`<span class="zg-ai-cell">${this.aiResults[cacheKey]}</span>`;
+      }
+
+      // Check internal cache
+      if (this._aiCache.has(cacheKey)) {
+        return html`<span class="zg-ai-cell">${this._aiCache.get(cacheKey)}</span>`;
+      }
+
+      // Check loading state
+      if (this._aiLoading.has(cacheKey)) {
+        return html`<span class="zg-ai-loading"><span class="zg-ai-spinner"></span></span>`;
+      }
+
+      // Emit request event (only once)
+      this._aiLoading = new Set([...this._aiLoading, cacheKey]);
+      const context: Record<string, unknown> = {};
+      for (const f of col.ai.fields) context[f] = row[f];
+      setTimeout(() => {
+        this._dispatchGridEvent('ai-request', {
+          row, prompt: col.ai!.prompt, fields: context, field: col.field, cacheKey
+        });
+      }, 0);
+      return html`<span class="zg-ai-loading"><span class="zg-ai-spinner"></span></span>`;
+    }
+
+    // v0.8 — Cell Hyperlinks
+    if (col.hyperlink && val != null && !isTotals) {
+      let href = '#';
+      if (col.hyperlinkPattern) {
+        href = col.hyperlinkPattern.replace(/\{(\w+)\}/g, (_, f) => String(row[f] ?? ''));
+      } else {
+        href = String(val);
+      }
+      const target = col.hyperlinkTarget || '_blank';
+      return html`<a class="zg-link" href="${href}" target="${target}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
+    }
+
+        return html`${this._formatValue(val, col, isTotals)}`;
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────
@@ -2321,7 +2586,8 @@ export class ZenttoGrid extends LitElement {
           ${this.enableVirtualScroll && this._virtualScrollResult ? html`
             <div class="zg-virtual-spacer" style="height:${this._virtualScrollResult.totalHeight}px"></div>
           ` : nothing}
-          <table class="zg-table" role="grid" aria-rowcount="${this._sortedRows.length}"
+          <table class="zg-table" role="grid" aria-rowcount="${this._sortedRows.length}" aria-colcount="${visibleCols.length}"
+                 aria-label="${this._t('Tabla de datos', 'Data grid')}"
                  style="${this.enableVirtualScroll && this._virtualScrollResult ? `transform:translateY(${this._virtualScrollResult.offsetY}px)` : ''}">
             <thead role="rowgroup">
               <!-- Column Groups -->
@@ -2368,7 +2634,8 @@ export class ZenttoGrid extends LitElement {
                   </th>
                 `})}
                 ${hasActions ? html`
-                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;top:0;z-index:5;background:var(--zg-header-bg)">
+                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;top:0;z-index:5;background:var(--zg-header-bg)"
+                      role="columnheader" aria-label="${this._t('Acciones', 'Actions')}">
                     ${this._t('Acciones', 'Actions')}
                   </th>
                 ` : nothing}
@@ -2400,8 +2667,9 @@ export class ZenttoGrid extends LitElement {
                 if (isGroupHeader) {
                   const expanded = this._isGroupExpanded(groupValue);
                   return html`
-                    <tr class="zg-row zg-row-group-header" @click=${() => this._toggleGroup(groupValue)}>
-                      <td class="zg-td zg-td-group-header" colspan="${colSpanTotal}">
+                    <tr class="zg-row zg-row-group-header" role="row" aria-expanded="${expanded ? 'true' : 'false'}"
+                        @click=${() => this._toggleGroup(groupValue)}>
+                      <td class="zg-td zg-td-group-header" colspan="${colSpanTotal}" role="gridcell">
                         <span class="zg-group-chevron ${expanded ? 'zg-group-chevron--expanded' : ''}">\u25B6</span>
                         <strong>${row[String(row['__zentto_group_field__'])]}</strong>
                       </td>
@@ -2411,7 +2679,7 @@ export class ZenttoGrid extends LitElement {
 
                 if (isSubtotal) {
                   return html`
-                    <tr class="zg-row zg-row-subtotal">
+                    <tr class="zg-row zg-row-subtotal" role="row">
                       ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
                       <td class="zg-td zg-td-row-num"></td>
                       ${visibleCols.map((col) => {
@@ -2447,7 +2715,8 @@ export class ZenttoGrid extends LitElement {
                       <td class="zg-td zg-drag-handle">${!isTotals ? '\u2630' : ''}</td>
                     ` : nothing}
                     ${this.enableMasterDetail ? html`
-                      <td class="zg-td zg-td-expand" @click=${(e: Event) => { e.stopPropagation(); this._toggleRowExpand(row); }}>
+                      <td class="zg-td zg-td-expand" role="gridcell" aria-expanded="${expanded ? 'true' : 'false'}"
+                          @click=${(e: Event) => { e.stopPropagation(); this._toggleRowExpand(row); }}>
                         <span class="zg-expand-chevron ${expanded ? 'zg-expand-chevron--expanded' : ''}">\u25B6</span>
                       </td>
                     ` : nothing}
