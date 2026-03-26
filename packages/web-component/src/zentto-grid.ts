@@ -2523,10 +2523,13 @@ export class ZenttoGrid extends LitElement {
     if (col.barcode && val != null && !isTotals) {
       const data = String(val);
       if (data) {
-        const svg = col.barcode === 'qr'
-          ? generateQrSvg(data, 32)
-          : generateBarcodeSvg(data, col.barcode, 120, 28);
-        return html`<span class="zg-barcode-cell" title="${data}">${unsafeHTML(svg)}</span>`;
+        if (col.barcode === 'qr') {
+          return html`<span class="zg-barcode-cell" title="${data}">${unsafeHTML(generateQrSvg(data, 36))}</span>`;
+        }
+        // Barcode types: render barcode + mini QR side by side
+        const barSvg = generateBarcodeSvg(data, col.barcode, 100, 24);
+        const qrSvg = generateQrSvg(data, 24);
+        return html`<span class="zg-barcode-cell" title="${data}" style="display:flex;align-items:center;gap:4px">${unsafeHTML(barSvg)}${unsafeHTML(qrSvg)}</span>`;
       }
     }
 
