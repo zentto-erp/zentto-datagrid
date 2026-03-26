@@ -1642,6 +1642,86 @@ export const gridStyles = css`
   }
 
   /* ═══════════════════════════════════════════════
+     VALIDATION ERRORS
+     ═══════════════════════════════════════════════ */
+
+  .zg-td--validation-error {
+    position: relative;
+  }
+
+  .zg-td--validation-error::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--zg-error);
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  .zg-validation-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-top: 6px solid var(--zg-error);
+    z-index: 2;
+  }
+
+  .zg-validation-tooltip {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 4px;
+    z-index: 20;
+    background: var(--zg-error);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: var(--zg-radius);
+    white-space: nowrap;
+    box-shadow: var(--zg-shadow-md);
+    pointer-events: none;
+    margin-top: 2px;
+  }
+
+  .zg-td--validation-error:hover .zg-validation-tooltip {
+    display: block;
+  }
+
+  /* ═══════════════════════════════════════════════
+     DROPDOWN CELLS
+     ═══════════════════════════════════════════════ */
+
+  .zg-edit-select {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-bottom: 2px solid var(--zg-primary);
+    background: var(--zg-input-bg);
+    color: var(--zg-text);
+    font-size: var(--zg-font-size);
+    font-family: var(--zg-font-family);
+    padding: 0 4px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .zg-edit-select:focus {
+    box-shadow: var(--zg-focus-ring);
+  }
+
+  .zg-dropdown-color {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* ═══════════════════════════════════════════════
      MOBILE
      ═══════════════════════════════════════════════ */
 
