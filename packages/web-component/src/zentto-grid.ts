@@ -96,6 +96,19 @@ export class ZenttoGrid extends LitElement {
   @property({ type: String, attribute: 'view-mode' }) viewMode: 'table' | 'form' | 'cards' | 'kanban' = 'table';
   /** Field to group by in Kanban view (must be a status/category field) */
   @property({ type: String, attribute: 'kanban-field' }) kanbanField = '';
+  /** Which views to show in the toolbar switcher. Default: all. */
+  @property({ type: Boolean, attribute: 'show-view-table' }) showViewTable = true;
+  @property({ type: Boolean, attribute: 'show-view-form' }) showViewForm = true;
+  @property({ type: Boolean, attribute: 'show-view-cards' }) showViewCards = true;
+  @property({ type: Boolean, attribute: 'show-view-kanban' }) showViewKanban = true;
+
+  // ─── Create Button (emits 'create-click' event) ─────────────
+  /** Show a "New" button in the toolbar. Emits 'create-click' event. */
+  @property({ type: Boolean, attribute: 'enable-create' }) enableCreate = false;
+  /** Label for the create button */
+  @property({ type: String, attribute: 'create-label' }) createLabel = '';
+  /** Icon name for the create button (default: 'add') */
+  @property({ type: String, attribute: 'create-icon' }) createIcon = 'add';
 
   // ─── Toolbar ─────────────────────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-toolbar' }) enableToolbar = true;
@@ -2682,7 +2695,15 @@ export class ZenttoGrid extends LitElement {
         ${this._renderConfigSwitch(this._t('Selector de densidad', 'Density picker'), this.showToolbarDensity, v => { this.showToolbarDensity = v; }, this._t('Compacto, normal, amplio', 'Compact, standard, comfortable'))}
         ${this._renderConfigSwitch(this._t('Botones de exportar', 'Export buttons'), this.showToolbarExport, v => { this.showToolbarExport = v; }, this._t('CSV, Excel, JSON', 'CSV, Excel, JSON'))}
         ${this._renderConfigSwitch(this._t('Boton de filtros', 'Filter button'), this.showToolbarFilter, v => { this.showToolbarFilter = v; }, this._t('Panel de filtros avanzados', 'Advanced filter panel'))}
+        ${this._renderConfigSwitch(this._t('Boton crear', 'Create button'), this.enableCreate, v => { this.enableCreate = v; }, this._t('Boton para crear nuevo registro', 'Button to create new record'))}
       ` : nothing}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">${this._t('Vistas', 'Views')}</div>
+      ${this._renderConfigSwitch(this._t('Vista tabla', 'Table view'), this.showViewTable, v => { this.showViewTable = v; if (!v && this.viewMode === 'table') this.viewMode = 'form'; }, this._t('Filas y columnas clasicas', 'Classic rows and columns'))}
+      ${this._renderConfigSwitch(this._t('Vista formulario', 'Form view'), this.showViewForm, v => { this.showViewForm = v; }, this._t('Un registro a la vez', 'One record at a time'))}
+      ${this._renderConfigSwitch(this._t('Vista tarjetas', 'Cards view'), this.showViewCards, v => { this.showViewCards = v; }, this._t('Grid de tarjetas', 'Card grid'))}
+      ${this._renderConfigSwitch(this._t('Vista kanban', 'Kanban view'), this.showViewKanban, v => { this.showViewKanban = v; }, this._t('Columnas por estado', 'Columns by status'))}
     `;
   }
 
@@ -3120,6 +3141,17 @@ onMounted(() => {
       <div class="zg-toolbar">
         <div class="zg-toolbar-left">
           <span class="zg-row-count">${totalRows} ${this._t('filas', 'rows')}</span>
+
+          <!-- Create Button -->
+          ${this.enableCreate ? html`
+            <button class="zg-btn-primary" style="padding:4px 12px;font-size:12px;border-radius:16px;display:flex;align-items:center;gap:4px"
+                    @click=${() => this._dispatchGridEvent('create-click', {})}
+                    title="${this.createLabel || this._t('Nuevo', 'New')}">
+              ${this._iconHtml(this.createIcon || 'add')}
+              <span>${this.createLabel || this._t('Nuevo', 'New')}</span>
+            </button>
+          ` : nothing}
+
           ${selCount > 0 ? html`<span class="zg-selection-info">${selCount} ${this._t('seleccionadas', 'selected')}</span>` : nothing}
 
           <!-- Quick Search (global filter) -->
@@ -3142,10 +3174,10 @@ onMounted(() => {
 
         <div class="zg-toolbar-right">
           <!-- View Mode Switcher -->
-          <button class="zg-btn-icon ${this.viewMode === 'table' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'table'; }} title="${this._t('Vista tabla', 'Table view')}">${this._iconHtml('viewTable')}</button>
-          <button class="zg-btn-icon ${this.viewMode === 'form' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'form'; this._formIndex = 0; }} title="${this._t('Vista formulario', 'Form view')}">${this._iconHtml('viewForm')}</button>
-          <button class="zg-btn-icon ${this.viewMode === 'cards' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'cards'; }} title="${this._t('Vista tarjetas', 'Cards view')}">${this._iconHtml('viewCards')}</button>
-          ${this.columns.some(c => c.statusColors) ? html`
+          ${this.showViewTable ? html`<button class="zg-btn-icon ${this.viewMode === 'table' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'table'; }} title="${this._t('Vista tabla', 'Table view')}">${this._iconHtml('viewTable')}</button>` : nothing}
+          ${this.showViewForm ? html`<button class="zg-btn-icon ${this.viewMode === 'form' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'form'; this._formIndex = 0; }} title="${this._t('Vista formulario', 'Form view')}">${this._iconHtml('viewForm')}</button>` : nothing}
+          ${this.showViewCards ? html`<button class="zg-btn-icon ${this.viewMode === 'cards' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'cards'; }} title="${this._t('Vista tarjetas', 'Cards view')}">${this._iconHtml('viewCards')}</button>` : nothing}
+          ${this.showViewKanban && this.columns.some(c => c.statusColors) ? html`
             <button class="zg-btn-icon ${this.viewMode === 'kanban' ? 'zg-btn-icon--active' : ''}" @click=${() => { this.viewMode = 'kanban'; if (!this.kanbanField) { const sc = this.columns.find(c => c.statusColors); if (sc) this.kanbanField = sc.field; } }} title="${this._t('Vista kanban', 'Kanban view')}">${this._iconHtml('viewKanban')}</button>
           ` : nothing}
           <span class="zg-toolbar-sep"></span>
