@@ -1859,6 +1859,18 @@ export class ZenttoGrid extends LitElement {
 
   private _renderCellContent(val: unknown, col: ColumnDef, row: GridRow) {
     const isTotals = !!row['__zentto_totals__'];
+
+    // Action buttons column
+    if (col.type === 'actions' && col.actions && !isTotals) {
+      return html`${col.actions.map(btn => html`
+        <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
+                title="${btn.label}"
+                @click=${(e: Event) => { e.stopPropagation(); this._dispatchGridEvent('action-click', { action: btn.action, row }); }}>
+          ${unsafeHTML(this._resolveActionIcon(btn.icon))}
+        </button>
+      `)}`;
+    }
+
     if (col.renderCell && !isTotals) return html`<span .innerHTML=${col.renderCell(val, row)}></span>`;
 
     // Sparkline columns

@@ -43,8 +43,8 @@ export interface ColumnDef {
   flex?: number;
   /** Minimum width */
   minWidth?: number;
-  /** Data type */
-  type?: 'string' | 'number' | 'date' | 'datetime' | 'boolean';
+  /** Data type. 'actions' renders action buttons instead of data. */
+  type?: 'string' | 'number' | 'date' | 'datetime' | 'boolean' | 'actions';
   /** Allow sorting */
   sortable?: boolean;
   /** Allow filtering */
@@ -96,6 +96,9 @@ export interface ColumnDef {
   imageField?: string;
   imageWidth?: number;
   imageHeight?: number;
+
+  /** Action buttons (only for type: 'actions') */
+  actions?: ActionButtonDef[];
 
   /** Allow grouping by this column */
   groupable?: boolean;
