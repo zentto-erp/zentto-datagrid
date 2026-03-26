@@ -33,10 +33,17 @@ import {
   // v0.5 — Tree Data & Cell Merge
   buildTreeRows,
   computeMergeMap,
-  // v0.7
+  // v0.6 — Batch Edit
+  applyBatchEdit,
+  // v0.7 — Charts & Print
   generateChartSvg,
   detectNumericFields,
   generatePrintHtml,
+  // v0.8 — Audit, Barcode, Timeline
+  AuditTrail,
+  generateQrSvg,
+  generateBarcodeSvg,
+  generateTimelineSvg,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -58,6 +65,16 @@ import type {
   // v0.5
   TreeNode,
   MergeMap,
+  // v0.6
+  BatchChange,
+  // v0.7
+  ChartConfig,
+  ChartType,
+  PrintOptions,
+  NoteChangeDetail,
+  // v0.8
+  AuditEntry,
+  TimelineEntry,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -303,6 +320,16 @@ export class ZenttoGrid extends LitElement {
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
 
+  // ─── v0.6 — Server-Side Mode ──────────────────────────────────
+  @property({ type: String, attribute: 'pagination-mode' }) paginationMode: 'client' | 'server' = 'client';
+  @property({ type: Number, attribute: 'total-rows' }) totalRows = 0;
+  @property({ type: Boolean, attribute: 'server-loading' }) serverLoading = false;
+
+  // ─── v0.6 — Infinite Scroll ──────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-infinite-scroll' }) enableInfiniteScroll = false;
+  @property({ type: Boolean, attribute: 'infinite-scroll-loading' }) infiniteScrollLoading = false;
+  @property({ type: Boolean, attribute: 'infinite-scroll-done' }) infiniteScrollDone = false;
+
   // --- v0.7 --- Charts ------------------------------------------------
   @property({ type: Boolean, attribute: 'enable-charts' }) enableCharts = false;
 
@@ -314,6 +341,10 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'enable-comments' }) enableComments = false;
   @property({ attribute: false }) cellNotes: Record<string, string> = {};
 
+  // ─── v0.8 — Audit Trail ──────────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-audit' }) enableAudit = false;
+  @property({ attribute: false }) auditUser?: string;
+  @property({ attribute: false }) aiResults: Record<string, string> = {};
 
   // ─── v0.5 — Tree Data (Hierarchical) ──────────────────────────
   @property({ type: Boolean, attribute: 'enable-tree-data' }) enableTreeData = false;
@@ -403,6 +434,15 @@ export class ZenttoGrid extends LitElement {
 
   // v0.2 — Undo/Redo
   private _undoRedoStack = new UndoRedoStack(200);
+
+  // v0.6 — Infinite Scroll state
+  private _infiniteScrollObserver: IntersectionObserver | null = null;
+  private _infiniteScrollPage = 1;
+
+  // v0.8 — Audit Trail & AI state
+  private _auditTrail = new AuditTrail();
+  private _aiCache = new Map<string, string>();
+  @state() private _aiLoading = new Set<string>();
 
   // v0.2 — Range Selection state
   @state() private _rangeAnchor: { rowIdx: number; colIdx: number } | null = null;
@@ -1258,14 +1298,6 @@ export class ZenttoGrid extends LitElement {
     else if (key === 'ArrowLeft') { e.preventDefault(); this._moveActiveCell(0, -1); }
     else if (key === 'Tab') { e.preventDefault(); this._moveActiveCell(0, e.shiftKey ? -1 : 1); }
     else if (key === 'Enter') {
-
-    // v0.8 — Audit trail
-    if (this.enableAudit) {
-      const auditEntry: AuditEntry = { field, rowKey, oldValue, newValue, user: this.auditUser || 'unknown', timestamp: Date.now() };
-      this._auditTrail.record(auditEntry);
-      this._dispatchGridEvent('audit-change', { entry: auditEntry, history: this._auditTrail.getHistory(rowKey, field) });
-      this.requestUpdate();
-    }
       e.preventDefault();
       if (this.enableEditing) {
         // In edit mode: Enter starts editing the active cell
@@ -1296,6 +1328,13 @@ export class ZenttoGrid extends LitElement {
 
     const oldValue = currentRow[field];
     if (newValue === oldValue) return;
+
+    // v0.8 — Audit trail
+    if (this.enableAudit) {
+      const auditEntry: AuditEntry = { field, rowKey, oldValue, newValue, user: this.auditUser || 'unknown', timestamp: Date.now() };
+      this._auditTrail.record(auditEntry);
+      this._dispatchGridEvent('audit-change', { entry: auditEntry, history: this._auditTrail.getHistory(rowKey, field) });
+    }
 
     // Push undo action
     this._pushUndoAction({ type: 'cell-edit', timestamp: Date.now(), rowKey, field, oldValue, newValue });
@@ -1781,10 +1820,40 @@ export class ZenttoGrid extends LitElement {
         this._showColumnsPanel = true;
         break;
       }
+      case 'auto-size': {
+        this._autoSizeColumn(field);
+        break;
+      }
     }
 
     this._dispatchGridEvent('header-menu-action', { field, action });
     this._closeHeaderMenu();
+  }
+
+  // ─── v0.6 — Auto-size Column ────────────────────────────────────
+
+  private _autoSizeColumn(field: string) {
+    const table = this.shadowRoot?.querySelector('.zg-table');
+    if (!table) return;
+    const colIdx = this._visibleColumns.findIndex(c => c.field === field);
+    if (colIdx < 0) return;
+    let maxWidth = 60;
+    const col = this.columns.find(c => c.field === field);
+    const headerText = col?.header || field;
+    maxWidth = Math.max(maxWidth, headerText.length * 8 + 48);
+    const rows = table.querySelectorAll('tbody tr');
+    for (const row of rows) {
+      const tds = row.querySelectorAll('td');
+      let offset = 0;
+      if (this.enableRowSelection) offset++;
+      if (this.enableDragDrop) offset++;
+      if (this.enableMasterDetail) offset++;
+      offset++;
+      const td = tds[colIdx + offset];
+      if (td) maxWidth = Math.max(maxWidth, td.scrollWidth + 16);
+    }
+    this._columnWidths = { ...this._columnWidths, [field]: Math.min(maxWidth, 600) };
+    this._dispatchGridEvent('column-resize', { field, width: this._columnWidths[field] });
   }
 
   // ─── Column Resize ─────────────────────────────────────────────
@@ -1992,6 +2061,100 @@ export class ZenttoGrid extends LitElement {
     if (this.enableUndoRedo) {
       this._undoRedoStack.push(action);
     }
+  }
+
+  // ─── v0.8 — Audit Trail helpers ─────────────────────────────
+
+  private _getAuditTooltip(row: GridRow, field: string): string {
+    const rk = this._getRowKey(row);
+    const h = this._auditTrail.getHistory(rk, field);
+    if (h.length === 0) return '';
+    const l = h[h.length - 1];
+    const d = new Date(l.timestamp);
+    const ds = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    return `${this._t('Cambiado por', 'Changed by')} ${l.user} ${this._t('el', 'on')} ${ds} — ${this._t('Anterior', 'Previous')}: ${String(l.oldValue)}`;
+  }
+
+  /** Public: set AI result from external provider */
+  setAiResult(cacheKey: string, result: string) {
+    this._aiCache.set(cacheKey, result);
+    const nl = new Set(this._aiLoading);
+    nl.delete(cacheKey);
+    this._aiLoading = nl;
+    this.requestUpdate();
+  }
+
+  /** Public: get full audit trail instance */
+  getAuditTrail() { return this._auditTrail; }
+
+  // ─── v0.6 — Batch Edit (Fill Down / Fill Range) ──────────────
+
+  private _fillDown() {
+    const range = this._normalizedRange;
+    if (!range) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const visibleCols = this._visibleColumns;
+    const changes: BatchChange[] = [];
+    for (let col = range.startCol; col <= range.endCol; col++) {
+      const field = visibleCols[col]?.field;
+      if (!field) continue;
+      const sourceRow = displayRows[range.startRow];
+      if (!sourceRow) continue;
+      const sourceValue = sourceRow[field];
+      for (let row = range.startRow + 1; row <= range.endRow; row++) {
+        const targetRow = displayRows[row];
+        if (!targetRow) continue;
+        changes.push({ rowKey: this._getRowKey(targetRow), field, oldValue: targetRow[field], newValue: sourceValue });
+        targetRow[field] = sourceValue;
+      }
+    }
+    if (changes.length > 0) {
+      this.rows = [...this.rows];
+      this._dispatchGridEvent('batch-edit', { changes });
+    }
+  }
+
+  private _fillRangeWithValue(value: unknown) {
+    const range = this._normalizedRange;
+    if (!range) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const visibleCols = this._visibleColumns;
+    const changes: BatchChange[] = [];
+    for (let row = range.startRow; row <= range.endRow; row++) {
+      for (let col = range.startCol; col <= range.endCol; col++) {
+        const field = visibleCols[col]?.field;
+        if (!field) continue;
+        const targetRow = displayRows[row];
+        if (!targetRow) continue;
+        const colDef = this.columns.find(c => c.field === field);
+        const newValue = colDef?.type === 'number' ? Number(value) : value;
+        changes.push({ rowKey: this._getRowKey(targetRow), field, oldValue: targetRow[field], newValue });
+        targetRow[field] = newValue;
+      }
+    }
+    if (changes.length > 0) {
+      this.rows = [...this.rows];
+      this._dispatchGridEvent('batch-edit', { changes });
+    }
+  }
+
+  // ─── v0.6 — Infinite Scroll ─────────────────────────────────
+
+  private _setupInfiniteScroll() {
+    if (!this.enableInfiniteScroll) return;
+    requestAnimationFrame(() => {
+      const sentinel = this.shadowRoot?.querySelector('.zg-infinite-sentinel');
+      if (!sentinel) return;
+      this._infiniteScrollObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && !this.infiniteScrollLoading && !this.infiniteScrollDone) {
+            this._infiniteScrollPage++;
+            this._dispatchGridEvent('load-more', { page: this._infiniteScrollPage });
+          }
+        }
+      }, { root: this.shadowRoot?.querySelector('.zg-table-wrapper'), threshold: 0.1 });
+      this._infiniteScrollObserver.observe(sentinel);
+    });
   }
 
   // ─── v0.2 — Range Selection ─────────────────────────────────
@@ -2486,6 +2649,9 @@ export class ZenttoGrid extends LitElement {
     window.removeEventListener('resize', this._handleResize);
     this._themeObserver?.disconnect();
     this._darkMediaQuery?.removeEventListener('change', this._handleMediaChange);
+    // v0.6 — Infinite Scroll cleanup
+    this._infiniteScrollObserver?.disconnect();
+    this._infiniteScrollObserver = null;
   }
 
   private _handlePasteEvent = (e: Event) => this._handlePaste(e as ClipboardEvent);
@@ -2507,6 +2673,11 @@ export class ZenttoGrid extends LitElement {
     // Persist layout on relevant changes
     if (this.gridId && (changed.has('density') || changed.has('groupField') || changed.has('enableGrouping') || changed.has('_columnWidths') || changed.has('_hiddenColumns'))) {
       this._persistLayout();
+    }
+    // v0.6 — Infinite Scroll setup
+    if (changed.has('enableInfiniteScroll') && this.enableInfiniteScroll) {
+      this._infiniteScrollObserver?.disconnect();
+      this._setupInfiniteScroll();
     }
   }
 
@@ -2567,6 +2738,12 @@ export class ZenttoGrid extends LitElement {
     if (e.key === 'Escape' && this._rangeAnchor) {
       this._rangeAnchor = null;
       this._rangeEnd = null;
+    }
+    // v0.6 — Ctrl+D: Fill down
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd' && this.enableRangeSelection && this._normalizedRange) {
+      e.preventDefault();
+      this._fillDown();
+      return;
     }
     // Excel-like grid navigation
     this._handleGridKeydown(e);
@@ -3006,7 +3183,15 @@ export class ZenttoGrid extends LitElement {
               </tbody>
             ` : nothing}
           </table>
+          ${this.enableInfiniteScroll ? html`
+            <div class="zg-infinite-sentinel">
+              ${this.infiniteScrollLoading ? html`<div class="zg-infinite-spinner"><div class="zg-spinner"></div> ${this._t('Cargando mas...', 'Loading more...')}</div>` : nothing}
+              ${this.infiniteScrollDone ? html`<div class="zg-infinite-done">${this._t('No hay mas datos', 'No more data')}</div>` : nothing}
+            </div>
+          ` : nothing}
         </div>` : nothing}
+
+        ${this.serverLoading ? html`<div class="zg-loading"><div class="zg-spinner"></div></div>` : nothing}
 
         <!-- Cell Context Menu -->
         ${this._contextMenu ? html`

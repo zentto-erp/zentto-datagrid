@@ -2056,4 +2056,86 @@ export const gridStyles = css`
   }
   .zg-theme-dark .zg-note-editor { background: #242830; color: #dce0e5; }
   .zg-theme-dark .zg-note-textarea { background: #1b1f27; color: #dce0e5; }
+
+  /* ═══════════════════════════════════════════════
+     v0.6 — INFINITE SCROLL
+     ═══════════════════════════════════════════════ */
+
+  .zg-infinite-sentinel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px;
+  }
+  .zg-infinite-spinner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--zg-text-secondary);
+    font-size: 12px;
+  }
+  .zg-infinite-done {
+    color: var(--zg-text-muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.8 — PREMIUM CELL TYPES
+     ═══════════════════════════════════════════════ */
+
+  .zg-audit-dot { position:absolute;top:3px;left:3px;width:6px;height:6px;border-radius:50%;background:var(--zg-info,#2d7dd2);pointer-events:auto;cursor:help;z-index:2;box-shadow:0 0 0 1px rgba(255,255,255,0.8); }
+  .zg-barcode-cell { display:flex;align-items:center;justify-content:center;line-height:1; }
+  .zg-barcode-cell svg { max-height:28px;width:auto; }
+  .zg-timeline-cell { display:flex;align-items:center;line-height:1; }
+  .zg-timeline-cell svg { max-height:20px;width:120px; }
+  .zg-ai-sparkle { display:inline-flex;align-items:center;color:var(--zg-warning,#e67e22);margin-right:2px;vertical-align:middle; }
+  .zg-ai-sparkle svg { width:14px;height:14px; }
+  .zg-ai-cell { font-style:italic;color:var(--zg-text-secondary);font-size:12px; }
+  .zg-ai-loading { display:flex;align-items:center;justify-content:center;gap:4px;color:var(--zg-text-muted);font-size:11px; }
+  .zg-ai-spinner { display:inline-block;width:14px;height:14px;border:2px solid var(--zg-border);border-top-color:var(--zg-primary);border-radius:50%;animation:zg-spin 0.7s linear infinite; }
+
+  /* ═══════════════════════════════════════════════
+     v1.0 — ADDITIONAL ACCESSIBILITY FOCUS STATES
+     ═══════════════════════════════════════════════ */
+
+  .zg-container:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-page-size:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-expand-chevron:focus-visible,
+  .zg-group-chevron:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .zg-td--active:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-btn-danger:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-context-item:focus-visible,
+  .zg-header-menu-item:focus-visible {
+    background: var(--zg-header-hover);
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-density-item:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
 `;
