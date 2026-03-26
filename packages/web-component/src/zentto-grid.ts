@@ -452,6 +452,9 @@ export class ZenttoGrid extends LitElement {
   // v0.4 — Validation errors: key = `${rowKey}_${field}`, value = error message
   @state() private _validationErrors: Record<string, string> = {};
 
+  // v0.8 — Barcode zoom modal
+  @state() private _barcodeZoom: { data: string; type: 'qr' | 'code128' | 'ean13' | 'code39' } | null = null;
+
   // v0.2 — Range Selection state
   @state() private _rangeAnchor: { rowIdx: number; colIdx: number } | null = null;
   @state() private _rangeEnd: { rowIdx: number; colIdx: number } | null = null;
@@ -2523,13 +2526,13 @@ export class ZenttoGrid extends LitElement {
     if (col.barcode && val != null && !isTotals) {
       const data = String(val);
       if (data) {
+        const openZoom = (e: Event) => { e.stopPropagation(); e.preventDefault(); this._barcodeZoom = { data, type: col.barcode! as any }; };
         if (col.barcode === 'qr') {
-          return html`<span class="zg-barcode-cell" title="${data}">${unsafeHTML(generateQrSvg(data, 36))}</span>`;
+          return html`<span class="zg-barcode-cell zg-barcode-clickable" title="${this._t('Doble-click para ampliar', 'Double-click to zoom')}" @dblclick=${openZoom}>${unsafeHTML(generateQrSvg(data, 36))}</span>`;
         }
-        // Barcode types: render barcode + mini QR side by side
         const barSvg = generateBarcodeSvg(data, col.barcode, 100, 24);
         const qrSvg = generateQrSvg(data, 24);
-        return html`<span class="zg-barcode-cell" title="${data}" style="display:flex;align-items:center;gap:4px">${unsafeHTML(barSvg)}${unsafeHTML(qrSvg)}</span>`;
+        return html`<span class="zg-barcode-cell zg-barcode-clickable" title="${this._t('Doble-click para ampliar', 'Double-click to zoom')}" style="display:flex;align-items:center;gap:4px" @dblclick=${openZoom}>${unsafeHTML(barSvg)}${unsafeHTML(qrSvg)}</span>`;
       }
     }
 
@@ -3324,6 +3327,31 @@ export class ZenttoGrid extends LitElement {
             <div class="zg-note-editor-footer">
               <button class="zg-btn" @click=${() => { this._noteEditing = null; }}>${this._t('Cancelar', 'Cancel')}</button>
               <button class="zg-btn-primary" @click=${() => this._saveNote()}>${this._t('Guardar', 'Save')}</button>
+            </div>
+          </div>
+        ` : nothing}
+
+        <!-- Barcode Zoom Modal -->
+        ${this._barcodeZoom ? html`
+          <div class="zg-barcode-overlay" @click=${() => { this._barcodeZoom = null; }}>
+            <div class="zg-barcode-modal" @click=${(e: Event) => e.stopPropagation()}>
+              <div class="zg-barcode-modal-header">
+                <span style="font-weight:600;font-size:14px">${this._barcodeZoom.data}</span>
+                <button class="zg-btn-icon" @click=${() => { this._barcodeZoom = null; }}>${this._iconHtml('close')}</button>
+              </div>
+              <div class="zg-barcode-modal-body">
+                ${this._barcodeZoom.type === 'qr'
+                  ? html`${unsafeHTML(generateQrSvg(this._barcodeZoom.data, 240))}`
+                  : html`
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+                      ${unsafeHTML(generateBarcodeSvg(this._barcodeZoom.data, this._barcodeZoom.type, 320, 80))}
+                      ${unsafeHTML(generateQrSvg(this._barcodeZoom.data, 180))}
+                    </div>
+                  `}
+              </div>
+              <div class="zg-barcode-modal-footer">
+                <span style="font-size:11px;color:var(--zg-text-muted)">${this._t('Escanea con tu dispositivo', 'Scan with your device')}</span>
+              </div>
             </div>
           </div>
         ` : nothing}

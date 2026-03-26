@@ -2128,6 +2128,14 @@ export const gridStyles = css`
   .zg-audit-dot { position:absolute;top:3px;left:3px;width:6px;height:6px;border-radius:50%;background:var(--zg-info,#2d7dd2);pointer-events:auto;cursor:help;z-index:2;box-shadow:0 0 0 1px rgba(255,255,255,0.8); }
   .zg-barcode-cell { display:flex;align-items:center;justify-content:center;line-height:1; }
   .zg-barcode-cell svg { max-height:28px;width:auto; }
+  .zg-barcode-clickable { cursor:pointer;border-radius:4px;transition:background .15s; }
+  .zg-barcode-clickable:hover { background:var(--zg-hover-bg,rgba(0,0,0,.04)); }
+  .zg-barcode-overlay { position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px); }
+  .zg-barcode-modal { background:var(--zg-bg,#fff);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);min-width:300px;max-width:420px;overflow:hidden; }
+  .zg-barcode-modal-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--zg-border); }
+  .zg-barcode-modal-body { display:flex;align-items:center;justify-content:center;padding:24px;background:var(--zg-surface,#f9fafb); }
+  .zg-barcode-modal-body svg { max-width:100%; }
+  .zg-barcode-modal-footer { display:flex;align-items:center;justify-content:center;padding:10px 16px;border-top:1px solid var(--zg-border); }
   .zg-timeline-cell { display:flex;align-items:center;line-height:1; }
   .zg-timeline-cell svg { max-height:20px;width:120px; }
   .zg-ai-sparkle { display:inline-flex;align-items:center;color:var(--zg-warning,#e67e22);margin-right:2px;vertical-align:middle; }
