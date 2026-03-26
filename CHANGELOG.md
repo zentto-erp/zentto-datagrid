@@ -2,13 +2,43 @@
 
 All notable changes to `@zentto/datagrid` will be documented in this file.
 
-## [1.0.0] - 2026-03-25
+## [1.0.0] - 2026-03-26
 
 ### Added
 - **129 unit tests** — Vitest test suite covering sort, filter, aggregate, group, paginate, formula, pivot, clipboard, find
 - **CI/CD** — GitHub Actions workflow: test on PR, auto-publish to npm on version bump
 - **Performance benchmarks** — Sort/filter/group/pivot benchmarks at 1K/10K/100K rows
 - **Accessibility audit** — ARIA roles (grid, row, columnheader, gridcell), aria-sort, aria-selected, aria-expanded, aria-level, aria-colcount, focus-visible styles
+- **QR codes now scannable** — Replaced custom QR implementation with `qrcode-generator` library (2KB, ISO 18004 compliant)
+- **Conditional Formatting** — `conditionalFormat` rules: 10 operators (eq, gt, lt, between, etc)
+- **Data Validation** — `validation` rules: email, number, date, regex, custom
+- **Dropdown Cells** — `dropdown` for select-in-cell editing
+- **Live Formula Recalculation** — formulas auto-recalculate on cell edit
+- **Tree Data** — `enable-tree-data` with parent-child hierarchy
+- **Row Pinning** — `pinnedRows: { top, bottom }`
+- **Cell Merge** — `merge: true` for auto-merge consecutive same values
+- **Collapsible Column Groups** — `collapsible: true` on groups
+- **Frozen/Split Panes** — `freeze-rows` and `freeze-cols`
+- **Server-Side Mode** — `pagination-mode="server"` with `server-request` event
+- **Infinite Scroll** — `enable-infinite-scroll` with `load-more` event
+- **Batch Edit** — Ctrl+D fill-down on selected range
+- **Column Auto-Size** — Double-click resize handle
+- **Charts (SVG)** — 5 types: bar, line, pie, area, donut
+- **Print/PDF** — `enable-print` with optimized layout
+- **Custom Summary Footer** — `aggregationLabel` per column
+- **Cell Comments/Notes** — `enable-comments` with orange triangle indicator
+- **Audit Trail** — `enable-audit` tracks changes with visual indicators
+- **QR/Barcode in cell** — `barcode: 'qr' | 'code128'`
+- **Status Timeline** — `timeline: true` for mini timelines
+- **AI Column** — `ai: { prompt, fields }` for generative columns
+- **Cell Hyperlinks** — `hyperlink: true` with URL patterns
+- **Create Button** — `enable-create` emits `create-click` event
+- **View Toggles** — `show-view-table/form/cards/kanban` configurable
+- **Boolean rendering** — `type: 'boolean'` with check/X icons
+- **Radio Options** — `radioOptions` for multi-state visual selectors
+- **Color type** — `type: 'color'` with swatch circle
+- **Percentage type** — `type: 'percentage'` with progress bar
+- **Actions as column** — `type: 'actions'` with named icon resolution (30+ icons)
 
 ## [0.8.0] - 2026-03-25
 
