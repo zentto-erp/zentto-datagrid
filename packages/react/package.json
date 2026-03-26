@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-react",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "React wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",

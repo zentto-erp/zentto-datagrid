@@ -43,8 +43,13 @@ export interface ColumnDef {
   flex?: number;
   /** Minimum width */
   minWidth?: number;
-  /** Data type. 'actions' renders action buttons instead of data. */
-  type?: 'string' | 'number' | 'date' | 'datetime' | 'boolean' | 'actions';
+  /** Data type. Special types render visual representations:
+   * - 'boolean' → check/X icon
+   * - 'actions' → action buttons
+   * - 'color' → color swatch circle
+   * - 'percentage' → progress bar with number
+   */
+  type?: 'string' | 'number' | 'date' | 'datetime' | 'boolean' | 'actions' | 'color' | 'percentage';
   /** Allow sorting */
   sortable?: boolean;
   /** Allow filtering */
@@ -99,6 +104,11 @@ export interface ColumnDef {
 
   /** Action buttons (only for type: 'actions') */
   actions?: ActionButtonDef[];
+
+  /** Radio options for multi-state fields. Renders radio buttons in the cell.
+   * Each option can be a string or { value, label, color? }.
+   * If editing is enabled, clicking changes the value and emits 'cell-edit'. */
+  radioOptions?: (string | { value: string; label: string; color?: string })[];
 
   /** Allow grouping by this column */
   groupable?: boolean;

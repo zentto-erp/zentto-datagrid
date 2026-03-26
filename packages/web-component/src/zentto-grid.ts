@@ -1888,6 +1888,69 @@ export class ZenttoGrid extends LitElement {
       `)}`;
     }
 
+    // Boolean → check/X icon
+    if (col.type === 'boolean' && !isTotals) {
+      const boolVal = val === true || val === 1 || val === '1' || val === 'true' || val === 'S' || val === 'Y' || val === 'yes' || val === 'si';
+      const falseVal = val === false || val === 0 || val === '0' || val === 'false' || val === 'N' || val === 'no' || val === -1 || val === '-1';
+      if (boolVal) {
+        return html`<span style="color:var(--zg-success,#0d9668);display:flex;align-items:center;justify-content:center">${this._iconHtml('check')}</span>`;
+      }
+      if (falseVal) {
+        return html`<span style="color:var(--zg-text-muted,#9aa0a6);display:flex;align-items:center;justify-content:center">${this._iconHtml('close')}</span>`;
+      }
+      return html`<span style="color:var(--zg-text-muted)">—</span>`;
+    }
+
+    // Radio options → visual radio buttons for multi-state fields
+    if (col.radioOptions && !isTotals) {
+      const currentVal = String(val ?? '');
+      return html`
+        <div style="display:flex;gap:4px;align-items:center">
+          ${col.radioOptions.map(opt => {
+            const optVal = typeof opt === 'string' ? opt : opt.value;
+            const optLabel = typeof opt === 'string' ? opt : opt.label;
+            const optColor = typeof opt === 'object' ? opt.color : undefined;
+            const isActive = currentVal === String(optVal);
+            return html`
+              <span style="display:inline-flex;align-items:center;gap:2px;cursor:${this.enableEditing ? 'pointer' : 'default'}"
+                    title="${optLabel}"
+                    @click=${this.enableEditing ? (e: Event) => {
+                      e.stopPropagation();
+                      const key = this._getRowKey(row);
+                      this.rows = [...this.rows.map(r => this._getRowKey(r) === key ? { ...r, [col.field]: optVal } : r)];
+                      this._dispatchGridEvent('cell-edit', { row: { ...row, [col.field]: optVal }, field: col.field, oldValue: val, newValue: optVal });
+                    } : nothing}>
+                <span style="width:14px;height:14px;border-radius:50%;border:2px solid ${isActive ? (optColor || 'var(--zg-primary)') : 'var(--zg-border-strong)'};display:flex;align-items:center;justify-content:center">
+                  ${isActive ? html`<span style="width:8px;height:8px;border-radius:50%;background:${optColor || 'var(--zg-primary)'}"></span>` : nothing}
+                </span>
+                <span style="font-size:10px;color:${isActive ? 'var(--zg-text)' : 'var(--zg-text-muted)'}">${optLabel}</span>
+              </span>
+            `;
+          })}
+        </div>
+      `;
+    }
+
+    // Color swatch → circle with color value
+    if (col.type === 'color' && val && !isTotals) {
+      return html`<span style="display:flex;align-items:center;gap:6px">
+        <span style="width:16px;height:16px;border-radius:50%;background:${String(val)};border:1px solid var(--zg-border);flex-shrink:0"></span>
+        <span style="font-size:11px;color:var(--zg-text-muted)">${val}</span>
+      </span>`;
+    }
+
+    // Percentage → bar + number
+    if (col.type === 'percentage' && !isTotals) {
+      const pct = Math.min(100, Math.max(0, Number(val) || 0));
+      const color = pct >= 75 ? 'var(--zg-success)' : pct >= 50 ? 'var(--zg-warning)' : pct >= 25 ? 'var(--zg-primary)' : 'var(--zg-error)';
+      return html`<span style="display:flex;align-items:center;gap:6px;width:100%">
+        <span style="flex:1;height:6px;background:var(--zg-surface);border-radius:3px;overflow:hidden">
+          <span style="display:block;height:100%;width:${pct}%;background:${color};border-radius:3px"></span>
+        </span>
+        <span style="font-size:11px;font-weight:600;min-width:32px;text-align:right">${pct}%</span>
+      </span>`;
+    }
+
     if (col.renderCell && !isTotals) return html`<span .innerHTML=${col.renderCell(val, row)}></span>`;
 
     // Sparkline columns
