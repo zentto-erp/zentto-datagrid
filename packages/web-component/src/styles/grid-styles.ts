@@ -1617,6 +1617,27 @@ export const gridStyles = css`
   }
 
   .zg-btn-icon:focus-visible,
+  /* v0.6 -- Infinite Scroll */
+  .zg-infinite-sentinel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px;
+  }
+  .zg-infinite-spinner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--zg-text-secondary);
+    font-size: 12px;
+  }
+  .zg-infinite-done {
+    color: var(--zg-text-muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+
   .zg-btn:focus-visible,
   .zg-btn-primary:focus-visible {
     box-shadow: var(--zg-focus-ring);
@@ -1626,6 +1647,45 @@ export const gridStyles = css`
   .zg-row-checkbox:focus-visible {
     outline: 2px solid var(--zg-primary);
     outline-offset: 2px;
+  }
+
+  .zg-container:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-page-size:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-expand-chevron:focus-visible,
+  .zg-group-chevron:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .zg-td--active:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-btn-danger:focus-visible {
+    box-shadow: var(--zg-focus-ring);
+    outline: none;
+  }
+
+  .zg-context-item:focus-visible,
+  .zg-header-menu-item:focus-visible {
+    background: var(--zg-hover-bg);
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
+  }
+
+  .zg-density-item:focus-visible {
+    outline: 2px solid var(--zg-primary);
+    outline-offset: -2px;
   }
 
   /* Skip link for screen readers */

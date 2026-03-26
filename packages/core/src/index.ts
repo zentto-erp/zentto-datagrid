@@ -57,6 +57,10 @@ export type { CellAddress, SelectionRange, NormalizedRange } from './selection/r
 export { parseClipboardData, applyPasteData } from './selection/paste';
 export type { PasteData } from './selection/paste';
 
+// Batch Edit
+export { applyBatchEdit } from './data/batch-edit';
+export type { BatchChange } from './data/batch-edit';
+
 // Formulas
 export { evaluateFormula, applyFormulas } from './data/formula';
 

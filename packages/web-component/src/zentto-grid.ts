@@ -30,6 +30,7 @@ import {
   sparklineLinePath,
   sparklineAreaPath,
   sparklineBars,
+  applyBatchEdit,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -48,6 +49,7 @@ import type {
   NormalizedRange,
   PasteData,
   SparklineData,
+  BatchChange,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -287,6 +289,16 @@ export class ZenttoGrid extends LitElement {
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
 
+  // ─── v0.6 — Server-Side Mode ──────────────────────────────────
+  @property({ type: String, attribute: 'pagination-mode' }) paginationMode: 'client' | 'server' = 'client';
+  @property({ type: Number, attribute: 'total-rows' }) totalRows = 0;
+  @property({ type: Boolean, attribute: 'server-loading' }) serverLoading = false;
+
+  // ─── v0.6 — Infinite Scroll ──────────────────────────────────
+  @property({ type: Boolean, attribute: 'enable-infinite-scroll' }) enableInfiniteScroll = false;
+  @property({ type: Boolean, attribute: 'infinite-scroll-loading' }) infiniteScrollLoading = false;
+  @property({ type: Boolean, attribute: 'infinite-scroll-done' }) infiniteScrollDone = false;
+
   // ─── Internal state ───────────────────────────────────────────
 
   @state() private _sorts: SortEntry[] = [];
@@ -366,6 +378,10 @@ export class ZenttoGrid extends LitElement {
   @state() private _datePickerOpen = false;
   @state() private _datePickerMonth = new Date();
 
+  // v0.6 — Infinite Scroll
+  private _infiniteScrollObserver: IntersectionObserver | null = null;
+  private _infiniteScrollPage = 1;
+
   // ─── i18n helper ────────────────────────────────────────────
   /** i18n helper — uses locale prefix to pick translation. Falls back to English. */
   private _t(es: string, en: string): string {
@@ -376,6 +392,8 @@ export class ZenttoGrid extends LitElement {
   // ─── Computed data ────────────────────────────────────────────
 
   private get _filteredRows(): GridRow[] {
+    if (this.paginationMode === 'server') return [...this.rows];
+
     // Apply formulas first
     let result = this.formulas.length > 0 ? applyFormulas(this.rows, this.formulas) : [...this.rows];
 
@@ -425,14 +443,20 @@ export class ZenttoGrid extends LitElement {
   }
 
   private get _sortedRows(): GridRow[] {
+    if (this.paginationMode === 'server') return this._filteredRows;
     return sortRows(this._filteredRows, this._sorts);
   }
 
   private get _paginatedResult() {
+    if (this.paginationMode === 'server') {
+      const totalPages = Math.max(1, Math.ceil(this.totalRows / this._pageSize));
+      return { rows: this._sortedRows, totalRows: this.totalRows, totalPages, page: this._page, pageSize: this._pageSize };
+    }
     return paginateRows(this._sortedRows, { page: this._page, pageSize: this._pageSize });
   }
 
   private get _groupedRows(): GridRow[] {
+    if (this.paginationMode === 'server') return this._sortedRows;
     if (this.enableGrouping && this.groupField) {
       const grouped = groupRows(this._sortedRows, {
         field: this.groupField,
@@ -467,6 +491,13 @@ export class ZenttoGrid extends LitElement {
   }
 
   private get _displayRows(): GridRow[] {
+    if (this.paginationMode === 'server') {
+      if (this.showTotals) {
+        const totals = computeTotals(this.rows, this.columns, this.totalsLabel);
+        return [...this.rows, totals];
+      }
+      return [...this.rows];
+    }
     // Pivot mode overrides everything
     if (this._pivotResult) {
       return this._pivotResult.rows;
@@ -541,6 +572,37 @@ export class ZenttoGrid extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
+  private _collectFilterRules(): FilterRule[] {
+    const rules: FilterRule[] = [];
+    for (const [field, val] of Object.entries(this._headerFilters)) {
+      if (!val) continue;
+      const col = this.columns.find(c => c.field === field);
+      if (col?.type === 'number') {
+        const match = val.match(/^([><=!]+)?\s*(.+)$/);
+        if (match) {
+          const op = match[1] || '=';
+          const opMap: Record<string, string> = { '>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte', '=': 'equals', '!=': 'notEquals' };
+          rules.push({ field, operator: (opMap[op] || 'gte') as FilterRule['operator'], value: Number(match[2]) });
+        }
+      } else {
+        rules.push({ field, operator: 'contains', value: val });
+      }
+    }
+    return rules;
+  }
+
+  private _emitServerRequest() {
+    if (this.paginationMode !== 'server') return;
+    this._dispatchGridEvent('server-request', {
+      page: this._page,
+      pageSize: this._pageSize,
+      sorts: this._sorts,
+      filters: this._collectFilterRules(),
+      search: this._quickSearch,
+      groupField: this.groupField || '',
+    });
+  }
+
   // ─── Sort handler ─────────────────────────────────────────────
 
   private _handleSort(field: string) {
@@ -556,6 +618,7 @@ export class ZenttoGrid extends LitElement {
       this._sorts = [];
     }
     this._dispatchGridEvent('sort-change', { sorts: this._sorts });
+    this._emitServerRequest();
   }
 
   private _getSortIcon(field: string): string {
@@ -569,16 +632,20 @@ export class ZenttoGrid extends LitElement {
   private _handlePageSizeChange(e: Event) {
     this._pageSize = Number((e.target as HTMLSelectElement).value);
     this._page = 0;
+    this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize });
+    this._emitServerRequest();
   }
 
-  private _prevPage() { if (this._page > 0) this._page--; }
-  private _nextPage() { if (this._page < this._paginatedResult.totalPages - 1) this._page++; }
+  private _prevPage() { if (this._page > 0) { this._page--; this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize }); this._emitServerRequest(); } }
+  private _nextPage() { if (this._page < this._paginatedResult.totalPages - 1) { this._page++; this._dispatchGridEvent('page-change', { page: this._page, pageSize: this._pageSize }); this._emitServerRequest(); } }
 
   // ─── Header filters ──────────────────────────────────────────
 
   private _handleFilterChange(field: string, value: string) {
     this._headerFilters = { ...this._headerFilters, [field]: value };
     this._page = 0;
+    this._dispatchGridEvent('filter-change', { filters: this._collectFilterRules() });
+    this._emitServerRequest();
   }
 
   // ─── Find ─────────────────────────────────────────────────────
@@ -674,6 +741,7 @@ export class ZenttoGrid extends LitElement {
       this.groupSubtotals = true;
       this._initGroups();
       this._dispatchGridEvent('group-change', { groupFields: this._groupFields, activeField: field });
+    this._emitServerRequest();
     }
   }
 
@@ -686,6 +754,7 @@ export class ZenttoGrid extends LitElement {
       this._clearGrouping();
     }
     this._dispatchGridEvent('group-change', { groupFields: this._groupFields, activeField: this.groupField });
+    this._emitServerRequest();
   }
 
   private _clearGrouping() {
@@ -694,6 +763,7 @@ export class ZenttoGrid extends LitElement {
     this.enableGrouping = false;
     this._expandedGroups = new Set();
     this._dispatchGridEvent('group-change', { groupFields: [], activeField: '' });
+    this._emitServerRequest();
   }
 
   // ─── Context Menu (cell) ──────────────────────────────────────
@@ -1488,10 +1558,38 @@ export class ZenttoGrid extends LitElement {
         this._showColumnsPanel = true;
         break;
       }
+      case 'auto-size': {
+        this._autoSizeColumn(field);
+        break;
+      }
     }
 
     this._dispatchGridEvent('header-menu-action', { field, action });
     this._closeHeaderMenu();
+  }
+
+  private _autoSizeColumn(field: string) {
+    const table = this.shadowRoot?.querySelector('.zg-table');
+    if (!table) return;
+    const colIdx = this._visibleColumns.findIndex(c => c.field === field);
+    if (colIdx < 0) return;
+    let maxWidth = 60;
+    const col = this.columns.find(c => c.field === field);
+    const headerText = col?.header || field;
+    maxWidth = Math.max(maxWidth, headerText.length * 8 + 48);
+    const rows = table.querySelectorAll('tbody tr');
+    for (const row of rows) {
+      const tds = row.querySelectorAll('td');
+      let offset = 0;
+      if (this.enableRowSelection) offset++;
+      if (this.enableDragDrop) offset++;
+      if (this.enableMasterDetail) offset++;
+      offset++;
+      const td = tds[colIdx + offset];
+      if (td) maxWidth = Math.max(maxWidth, td.scrollWidth + 16);
+    }
+    this._columnWidths = { ...this._columnWidths, [field]: Math.min(maxWidth, 600) };
+    this._dispatchGridEvent('column-resize', { field, width: this._columnWidths[field] });
   }
 
   // ─── Column Resize ─────────────────────────────────────────────
@@ -1881,7 +1979,7 @@ export class ZenttoGrid extends LitElement {
     if (col.type === 'actions' && col.actions && !isTotals) {
       return html`${col.actions.map(btn => html`
         <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
-                title="${btn.label}"
+                title="${btn.label}" aria-label="${btn.label}"
                 @click=${(e: Event) => { e.stopPropagation(); this._dispatchGridEvent('action-click', { action: btn.action, row }); }}>
           ${unsafeHTML(this._resolveActionIcon(btn.icon))}
         </button>
@@ -2035,6 +2133,7 @@ export class ZenttoGrid extends LitElement {
     // Also listen to system preference changes
     this._darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     this._darkMediaQuery.addEventListener('change', this._handleMediaChange);
+    this._setupInfiniteScroll();
   }
 
   private _themeObserver?: MutationObserver;
@@ -2109,6 +2208,25 @@ export class ZenttoGrid extends LitElement {
     window.removeEventListener('resize', this._handleResize);
     this._themeObserver?.disconnect();
     this._darkMediaQuery?.removeEventListener('change', this._handleMediaChange);
+    this._infiniteScrollObserver?.disconnect();
+    this._infiniteScrollObserver = null;
+  }
+
+  private _setupInfiniteScroll() {
+    if (!this.enableInfiniteScroll) return;
+    requestAnimationFrame(() => {
+      const sentinel = this.shadowRoot?.querySelector('.zg-infinite-sentinel');
+      if (!sentinel) return;
+      this._infiniteScrollObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && !this.infiniteScrollLoading && !this.infiniteScrollDone) {
+            this._infiniteScrollPage++;
+            this._dispatchGridEvent('load-more', { page: this._infiniteScrollPage });
+          }
+        }
+      }, { root: this.shadowRoot?.querySelector('.zg-table-wrapper'), threshold: 0.1 });
+      this._infiniteScrollObserver.observe(sentinel);
+    });
   }
 
   private _handlePasteEvent = (e: Event) => this._handlePaste(e as ClipboardEvent);
@@ -2130,6 +2248,10 @@ export class ZenttoGrid extends LitElement {
     // Persist layout on relevant changes
     if (this.gridId && (changed.has('density') || changed.has('groupField') || changed.has('enableGrouping') || changed.has('_columnWidths') || changed.has('_hiddenColumns'))) {
       this._persistLayout();
+    }
+    if (changed.has('enableInfiniteScroll') && this.enableInfiniteScroll) {
+      this._infiniteScrollObserver?.disconnect();
+      this._setupInfiniteScroll();
     }
   }
 
@@ -2191,9 +2313,64 @@ export class ZenttoGrid extends LitElement {
       this._rangeAnchor = null;
       this._rangeEnd = null;
     }
+    // v0.6 — Ctrl+D: Fill down
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd' && this.enableRangeSelection && this._normalizedRange) {
+      e.preventDefault();
+      this._fillDown();
+      return;
+    }
     // Excel-like grid navigation
     this._handleGridKeydown(e);
   };
+
+  private _fillDown() {
+    const range = this._normalizedRange;
+    if (!range) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const visibleCols = this._visibleColumns;
+    const changes: BatchChange[] = [];
+    for (let col = range.startCol; col <= range.endCol; col++) {
+      const field = visibleCols[col]?.field;
+      if (!field) continue;
+      const sourceRow = displayRows[range.startRow];
+      if (!sourceRow) continue;
+      const sourceValue = sourceRow[field];
+      for (let row = range.startRow + 1; row <= range.endRow; row++) {
+        const targetRow = displayRows[row];
+        if (!targetRow) continue;
+        changes.push({ rowKey: this._getRowKey(targetRow), field, oldValue: targetRow[field], newValue: sourceValue });
+        targetRow[field] = sourceValue;
+      }
+    }
+    if (changes.length > 0) {
+      this.rows = [...this.rows];
+      this._dispatchGridEvent('batch-edit', { changes });
+    }
+  }
+
+  private _fillRangeWithValue(value: unknown) {
+    const range = this._normalizedRange;
+    if (!range) return;
+    const displayRows = this._displayRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    const visibleCols = this._visibleColumns;
+    const changes: BatchChange[] = [];
+    for (let row = range.startRow; row <= range.endRow; row++) {
+      for (let col = range.startCol; col <= range.endCol; col++) {
+        const field = visibleCols[col]?.field;
+        if (!field) continue;
+        const targetRow = displayRows[row];
+        if (!targetRow) continue;
+        const colDef = this.columns.find(c => c.field === field);
+        const newValue = colDef?.type === 'number' ? Number(value) : value;
+        changes.push({ rowKey: this._getRowKey(targetRow), field, oldValue: targetRow[field], newValue });
+        targetRow[field] = newValue;
+      }
+    }
+    if (changes.length > 0) {
+      this.rows = [...this.rows];
+      this._dispatchGridEvent('batch-edit', { changes });
+    }
+  }
 
   // ─── Mobile detection ────────────────────────────────────────
 
@@ -2321,7 +2498,8 @@ export class ZenttoGrid extends LitElement {
           ${this.enableVirtualScroll && this._virtualScrollResult ? html`
             <div class="zg-virtual-spacer" style="height:${this._virtualScrollResult.totalHeight}px"></div>
           ` : nothing}
-          <table class="zg-table" role="grid" aria-rowcount="${this._sortedRows.length}"
+          <table class="zg-table" role="grid" aria-rowcount="${this._sortedRows.length}" aria-colcount="${visibleCols.length}"
+                 aria-label="${this._t('Tabla de datos', 'Data grid')}"
                  style="${this.enableVirtualScroll && this._virtualScrollResult ? `transform:translateY(${this._virtualScrollResult.offsetY}px)` : ''}">
             <thead role="rowgroup">
               <!-- Column Groups -->
@@ -2363,12 +2541,13 @@ export class ZenttoGrid extends LitElement {
                       <span class="zg-th-menu-trigger" @click=${(e: MouseEvent) => this._openHeaderMenu(e, col.field)} title="${this._t('Menu de columna', 'Column menu')}">${this._iconHtml('menu')}</span>
                     ` : nothing}
                     ${col.resizable !== false ? html`
-                      <span class="zg-resize-handle" @mousedown=${(e: MouseEvent) => this._handleResizeStart(e, col.field)}></span>
+                      <span class="zg-resize-handle" @mousedown=${(e: MouseEvent) => this._handleResizeStart(e, col.field)} @dblclick=${(e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); this._autoSizeColumn(col.field); }}></span>
                     ` : nothing}
                   </th>
                 `})}
                 ${hasActions ? html`
-                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;top:0;z-index:5;background:var(--zg-header-bg)">
+                  <th class="zg-th zg-th-right" style="width:${actionsWidth}px;position:sticky;right:0;top:0;z-index:5;background:var(--zg-header-bg)"
+                      role="columnheader" aria-label="${this._t('Acciones', 'Actions')}">
                     ${this._t('Acciones', 'Actions')}
                   </th>
                 ` : nothing}
@@ -2400,8 +2579,9 @@ export class ZenttoGrid extends LitElement {
                 if (isGroupHeader) {
                   const expanded = this._isGroupExpanded(groupValue);
                   return html`
-                    <tr class="zg-row zg-row-group-header" @click=${() => this._toggleGroup(groupValue)}>
-                      <td class="zg-td zg-td-group-header" colspan="${colSpanTotal}">
+                    <tr class="zg-row zg-row-group-header" role="row" aria-expanded="${expanded ? 'true' : 'false'}"
+                        @click=${() => this._toggleGroup(groupValue)}>
+                      <td class="zg-td zg-td-group-header" colspan="${colSpanTotal}" role="gridcell">
                         <span class="zg-group-chevron ${expanded ? 'zg-group-chevron--expanded' : ''}">\u25B6</span>
                         <strong>${row[String(row['__zentto_group_field__'])]}</strong>
                       </td>
@@ -2411,7 +2591,7 @@ export class ZenttoGrid extends LitElement {
 
                 if (isSubtotal) {
                   return html`
-                    <tr class="zg-row zg-row-subtotal">
+                    <tr class="zg-row zg-row-subtotal" role="row">
                       ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
                       <td class="zg-td zg-td-row-num"></td>
                       ${visibleCols.map((col) => {
@@ -2431,6 +2611,8 @@ export class ZenttoGrid extends LitElement {
                 return html`
                   <tr class="zg-row ${isTotals ? 'zg-row-totals' : idx % 2 ? 'zg-row-alt' : ''} ${isSelected ? 'zg-row--selected' : ''} ${isDragOver ? 'zg-row--drag-over' : ''}"
                       role="row" aria-rowindex="${this._page * this._pageSize + idx + 1}" aria-selected="${isSelected ? 'true' : 'false'}"
+                      aria-level="${(row as any)['__zentto_tree_level__'] != null ? String(Number((row as any)['__zentto_tree_level__']) + 1) : nothing}"
+                      aria-expanded="${this.enableMasterDetail && !isTotals ? (expanded ? 'true' : 'false') : nothing}"
                       draggable="${this.enableDragDrop && !isTotals ? 'true' : 'false'}"
                       @click=${() => this._dispatchGridEvent('row-click', { row, rowIndex: idx })}
                       @dragstart=${(e: DragEvent) => this._handleDragStart(e, row)}
@@ -2447,7 +2629,8 @@ export class ZenttoGrid extends LitElement {
                       <td class="zg-td zg-drag-handle">${!isTotals ? '\u2630' : ''}</td>
                     ` : nothing}
                     ${this.enableMasterDetail ? html`
-                      <td class="zg-td zg-td-expand" @click=${(e: Event) => { e.stopPropagation(); this._toggleRowExpand(row); }}>
+                      <td class="zg-td zg-td-expand" role="gridcell" aria-expanded="${expanded ? 'true' : 'false'}"
+                          @click=${(e: Event) => { e.stopPropagation(); this._toggleRowExpand(row); }}>
                         <span class="zg-expand-chevron ${expanded ? 'zg-expand-chevron--expanded' : ''}">\u25B6</span>
                       </td>
                     ` : nothing}
@@ -2492,7 +2675,7 @@ export class ZenttoGrid extends LitElement {
                       <td class="zg-td zg-td-right zg-td-actions" style="position:sticky;right:0;z-index:3;background:var(--zg-row-bg, var(--zg-bg));white-space:nowrap">
                         ${this.actionButtons.map(btn => html`
                           <button class="zg-btn-icon" style="${btn.color ? `color:${btn.color}` : ''}"
-                                  title="${btn.label}"
+                                  title="${btn.label}" aria-label="${btn.label}"
                                   @click=${(e: Event) => { e.stopPropagation(); this._handleAction(btn.action, row); }}>
                             ${unsafeHTML(this._resolveActionIcon(btn.icon))}
                           </button>
@@ -2526,7 +2709,15 @@ export class ZenttoGrid extends LitElement {
               })}
             </tbody>
           </table>
+          ${this.enableInfiniteScroll ? html`
+            <div class="zg-infinite-sentinel">
+              ${this.infiniteScrollLoading ? html`<div class="zg-infinite-spinner"><div class="zg-spinner"></div> ${this._t('Cargando mas...', 'Loading more...')}</div>` : nothing}
+              ${this.infiniteScrollDone ? html`<div class="zg-infinite-done">${this._t('No hay mas datos', 'No more data')}</div>` : nothing}
+            </div>
+          ` : nothing}
         </div>` : nothing}
+
+        ${this.serverLoading ? html`<div class="zg-loading"><div class="zg-spinner"></div></div>` : nothing}
 
         <!-- Cell Context Menu -->
         ${this._contextMenu ? html`
@@ -2578,6 +2769,10 @@ export class ZenttoGrid extends LitElement {
             </div>
             <div class="zg-header-menu-item" @click=${() => this._headerMenuAction('manage-columns')}>
               <span class="zg-header-menu-icon">${this._iconHtml('columns')}</span> ${this._t('Administrar columnas', 'Manage columns')}
+            </div>
+            <div class="zg-context-divider"></div>
+            <div class="zg-header-menu-item" @click=${() => this._headerMenuAction('auto-size')}>
+              <span class="zg-header-menu-icon">${this._iconHtml('columns')}</span> ${this._t('Auto-ajustar ancho', 'Auto-size column')}
             </div>
           </div>
         ` : nothing}
@@ -3222,7 +3417,7 @@ onMounted(() => {
             <input type="text" class="zg-find-input" style="width:180px;margin-left:8px"
               placeholder="${this._t('Buscar en tabla...', 'Search table...')}"
               .value=${this._quickSearch}
-              @input=${(e: InputEvent) => { this._quickSearch = (e.target as HTMLInputElement).value; this._page = 0; }} />
+              @input=${(e: InputEvent) => { this._quickSearch = (e.target as HTMLInputElement).value; this._page = 0; this._dispatchGridEvent('search-change', { query: this._quickSearch }); this._emitServerRequest(); }} />
           ` : nothing}
 
           <!-- Filter Panel toggle -->
@@ -3310,9 +3505,9 @@ onMounted(() => {
 
           <!-- Export buttons (inline, each with distinct icon) -->
           ${this.showToolbarExport ? html`
-            <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV">${this._iconHtml('exportCsv')} <span style="font-size:11px;font-weight:600">CSV</span></button>
-            <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel" style="color:var(--zg-success,#0d9668)">${this._iconHtml('exportExcel')} <span style="font-size:11px;font-weight:600">Excel</span></button>
-            <button class="zg-btn-icon" @click=${this._exportJson} title="JSON" style="color:var(--zg-warning,#e67e22)">${this._iconHtml('exportJson')} <span style="font-size:11px;font-weight:600">JSON</span></button>
+            <button class="zg-btn-icon" @click=${this._exportCsv} title="CSV" aria-label="${this._t("Exportar CSV", "Export CSV")}">${this._iconHtml('exportCsv')} <span style="font-size:11px;font-weight:600">CSV</span></button>
+            <button class="zg-btn-icon" @click=${this._exportExcel} title="Excel" aria-label="${this._t("Exportar Excel", "Export Excel")}" style="color:var(--zg-success,#0d9668)">${this._iconHtml('exportExcel')} <span style="font-size:11px;font-weight:600">Excel</span></button>
+            <button class="zg-btn-icon" @click=${this._exportJson} title="JSON" aria-label="${this._t("Exportar JSON", "Export JSON")}" style="color:var(--zg-warning,#e67e22)">${this._iconHtml('exportJson')} <span style="font-size:11px;font-weight:600">JSON</span></button>
           ` : nothing}
 
           <!-- Import button (available when enableImport or enableEditing) -->
