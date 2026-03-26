@@ -123,7 +123,7 @@ export class ZenttoGrid extends LitElement {
   @property({ type: String }) height = '500px';
 
   // ─── View Mode (table, form, cards, kanban) ─────────────────
-  @property({ type: String, attribute: 'view-mode' }) viewMode: 'table' | 'form' | 'cards' | 'kanban' = 'table';
+  @property({ type: String, attribute: 'view-mode' }) viewMode: 'table' | 'form' | 'cards' | 'kanban' | 'chart' = 'table';
   /** Field to group by in Kanban view (must be a status/category field) */
   @property({ type: String, attribute: 'kanban-field' }) kanbanField = '';
   /** Which views to show in the toolbar switcher. Default: all. */
@@ -396,6 +396,16 @@ export class ZenttoGrid extends LitElement {
   // Configurator panel state
   @state() private _configOpen = false;
   @state() private _formIndex = 0; // Current record index in form view
+
+  // Chart view state
+  @state() private _chartType: 'bar' | 'line' | 'pie' | 'area' | 'donut' | 'scatter' | 'stacked' | 'combo' = 'bar';
+  @state() private _chartXField = '';
+  @state() private _chartYFields: string[] = [];
+  @state() private _chartAgg: 'sum' | 'avg' | 'count' | 'min' | 'max' = 'sum';
+  @state() private _chartTitle = '';
+  @state() private _chartShowLegend = true;
+  @state() private _chartShowHelp = false;
+  @state() private _chartColors = ['#e67e22', '#3b82f6', '#0d9668', '#dc2626', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899'];
   @state() private _configTab: 'features' | 'advanced' | 'pivot' | 'groups' | 'appearance' | 'code' = 'features';
 
   // Context Menu state
@@ -467,11 +477,8 @@ export class ZenttoGrid extends LitElement {
   @state() private _datePickerOpen = false;
   @state() private _datePickerMonth = new Date();
 
-  // v0.7 — Charts panel state
+  // v0.7 — Charts (legacy — now uses _chartType from chart view state)
   @state() private _chartOpen = false;
-  @state() private _chartType: 'bar' | 'line' | 'pie' | 'area' | 'donut' = 'bar';
-  @state() private _chartLabelField = '';
-  @state() private _chartValueFields: string[] = [];
 
   // v0.7 — Cell note editing state
   @state() private _noteMenu: { x: number; y: number; rowKey: string; field: string } | null = null;
@@ -1019,28 +1026,28 @@ export class ZenttoGrid extends LitElement {
 
   private _toggleChartPanel() {
     this._chartOpen = !this._chartOpen;
-    if (this._chartOpen && !this._chartLabelField) {
+    if (this._chartOpen && !this._chartXField) {
       const textCol = this.columns.find(c => !c.field.startsWith('__') && c.type !== 'number' && !c.currency && c.type !== 'actions');
-      if (textCol) this._chartLabelField = textCol.field;
+      if (textCol) this._chartXField = textCol.field;
       const numCols = this.columns.filter(c => c.type === 'number' || c.currency);
-      if (numCols.length > 0) this._chartValueFields = [numCols[0].field];
+      if (numCols.length > 0) this._chartYFields = [numCols[0].field];
     }
   }
 
   private _getChartSvg(): string {
-    if (!this._chartLabelField || this._chartValueFields.length === 0) return '';
+    if (!this._chartXField || this._chartYFields.length === 0) return '';
     return generateChartSvg(this._filteredRows, {
       type: this._chartType,
-      labelField: this._chartLabelField,
-      valueFields: this._chartValueFields,
+      labelField: this._chartXField,
+      valueFields: this._chartYFields,
     });
   }
 
   private _toggleChartValueField(field: string) {
-    if (this._chartValueFields.includes(field)) {
-      this._chartValueFields = this._chartValueFields.filter(f => f !== field);
+    if (this._chartYFields.includes(field)) {
+      this._chartYFields = this._chartYFields.filter(f => f !== field);
     } else {
-      this._chartValueFields = [...this._chartValueFields, field];
+      this._chartYFields = [...this._chartYFields, field];
     }
   }
 
@@ -2903,16 +2910,16 @@ export class ZenttoGrid extends LitElement {
                   <option value="pie" ?selected=${this._chartType === 'pie'}>${this._t('Pastel', 'Pie')}</option>
                   <option value="donut" ?selected=${this._chartType === 'donut'}>${this._t('Dona', 'Donut')}</option>
                 </select>
-                <select class="zg-chart-select" @change=${(e: Event) => { this._chartLabelField = (e.target as HTMLSelectElement).value; }}>
+                <select class="zg-chart-select" @change=${(e: Event) => { this._chartXField = (e.target as HTMLSelectElement).value; }}>
                   <option value="">${this._t('Etiqueta...', 'Label...')}</option>
                   ${this.columns.filter(c => !c.field.startsWith('__') && c.type !== 'actions').map(c => html`
-                    <option value="${c.field}" ?selected=${this._chartLabelField === c.field}>${c.header || c.field}</option>
+                    <option value="${c.field}" ?selected=${this._chartXField === c.field}>${c.header || c.field}</option>
                   `)}
                 </select>
                 <span class="zg-chart-values-label">${this._t('Valores:', 'Values:')}</span>
                 ${this.columns.filter(c => c.type === 'number' || c.currency).map(c => html`
                   <label class="zg-chart-value-toggle">
-                    <input type="checkbox" .checked=${this._chartValueFields.includes(c.field)}
+                    <input type="checkbox" .checked=${this._chartYFields.includes(c.field)}
                       @change=${() => this._toggleChartValueField(c.field)} />
                     <span>${c.header || c.field}</span>
                   </label>
@@ -2960,6 +2967,7 @@ export class ZenttoGrid extends LitElement {
         ${this.viewMode === 'form' ? this._renderFormView() : nothing}
         ${this.viewMode === 'cards' ? this._renderCardsView() : nothing}
         ${this.viewMode === 'kanban' ? this._renderKanbanView() : nothing}
+        ${this.viewMode === 'chart' ? this._renderChartView() : nothing}
 
         <!-- Table (default view) -->
         ${this.viewMode === 'table' ? html`<div class="zg-table-wrapper ${this.enableVirtualScroll ? 'zg-virtual-scroll' : ''}"
@@ -3296,46 +3304,54 @@ export class ZenttoGrid extends LitElement {
             <div class="zg-context-item" @click=${this._contextExportVisible}>
               <span class="zg-header-menu-icon">${this._iconHtml('export')}</span> ${this._t('Exportar datos visibles', 'Export visible data')}
             </div>
-          </div>
-        ` : nothing}
-
-        <!-- Note context menu (v0.7) -->
-        ${this.enableComments && this._noteMenu ? html`
-          <div class="zg-context-menu" style="left:${this._noteMenu.x}px;top:${this._noteMenu.y}px" @click=${(e: Event) => e.stopPropagation()}>
-            ${!this.cellNotes[this._getNoteKey(this._noteMenu.rowKey, this._noteMenu.field)] ? html`
-              <div class="zg-context-item" @click=${() => this._startNoteEdit('add')}>
-                <span class="zg-header-menu-icon">${this._iconHtml('note')}</span> ${this._t('Agregar nota', 'Add note')}
-              </div>
-            ` : html`
-              <div class="zg-context-item" @click=${() => this._startNoteEdit('edit')}>
-                <span class="zg-header-menu-icon">${this._iconHtml('edit')}</span> ${this._t('Editar nota', 'Edit note')}
-              </div>
-              <div class="zg-context-item" @click=${() => this._deleteNote()} style="color:var(--zg-error)">
-                <span class="zg-header-menu-icon">${this._iconHtml('delete')}</span> ${this._t('Eliminar nota', 'Delete note')}
-              </div>
-            `}
+            ${this.enableComments ? html`
+              <div class="zg-context-divider"></div>
+              ${(() => {
+                const noteKey = this._getNoteKey(this._getRowKey(this._contextMenu!.row), this._contextMenu!.field);
+                const hasNote = !!this.cellNotes[noteKey];
+                // Set _noteMenu so _startNoteEdit/_deleteNote work
+                this._noteMenu = { x: this._contextMenu!.x, y: this._contextMenu!.y, rowKey: this._getRowKey(this._contextMenu!.row), field: this._contextMenu!.field };
+                return !hasNote ? html`
+                  <div class="zg-context-item" @click=${() => { this._closeContextMenu(); this._startNoteEdit('add'); }}>
+                    <span class="zg-header-menu-icon">${this._iconHtml('note')}</span> ${this._t('Agregar nota', 'Add note')}
+                  </div>
+                ` : html`
+                  <div class="zg-context-item" @click=${() => { this._closeContextMenu(); this._startNoteEdit('edit'); }}>
+                    <span class="zg-header-menu-icon">${this._iconHtml('edit')}</span> ${this._t('Editar nota', 'Edit note')}
+                  </div>
+                  <div class="zg-context-item" @click=${() => { this._closeContextMenu(); this._deleteNote(); }} style="color:var(--zg-error)">
+                    <span class="zg-header-menu-icon">${this._iconHtml('delete')}</span> ${this._t('Eliminar nota', 'Delete note')}
+                  </div>
+                `;
+              })()}
+            ` : nothing}
           </div>
         ` : nothing}
 
         <!-- Note editor modal (v0.7) -->
-        ${this._noteEditing ? html`
+        ${this._noteEditing ? (() => {
+          const noteRow = this.rows.find(r => this._getRowKey(r) === this._noteEditing!.rowKey);
+          const noteCol = this.columns.find(c => c.field === this._noteEditing!.field);
+          const cellValue = noteRow ? this._formatValue(noteRow[this._noteEditing!.field], noteCol || { field: this._noteEditing!.field }) : '';
+          const colHeader = noteCol?.header || this._noteEditing!.field;
+          return html`
           <div class="zg-note-overlay" @click=${() => { this._noteEditing = null; }}></div>
           <div class="zg-note-editor">
             <div class="zg-note-editor-header">
-              <span>${this._t('Nota', 'Note')}</span>
+              <span>${this._t('Nota', 'Note')}: ${cellValue || colHeader}</span>
               <button class="zg-btn-icon" @click=${() => { this._noteEditing = null; }}>${this._iconHtml('close')}</button>
             </div>
             <textarea class="zg-note-textarea"
               .value=${this._noteEditing.text}
               @input=${(e: InputEvent) => { this._noteEditing = { ...this._noteEditing!, text: (e.target as HTMLTextAreaElement).value }; }}
-              placeholder="${this._t('Escribe una nota...', 'Write a note...')}"
+              placeholder="${this._t('Escribe una nota sobre', 'Write a note about')} ${colHeader}..."
               autofocus></textarea>
             <div class="zg-note-editor-footer">
               <button class="zg-btn" @click=${() => { this._noteEditing = null; }}>${this._t('Cancelar', 'Cancel')}</button>
               <button class="zg-btn-primary" @click=${() => this._saveNote()}>${this._t('Guardar', 'Save')}</button>
             </div>
-          </div>
-        ` : nothing}
+          </div>`;
+        })() : nothing}
 
         <!-- Barcode Zoom Modal -->
         ${this._barcodeZoom ? html`
@@ -3912,6 +3928,354 @@ onMounted(() => {
 </template>`;
   }
 
+  // ─── View: Chart (full-screen analytics) ───────────────────────
+
+  /** Auto-detect best chart config from columns */
+  private _autoConfigChart() {
+    if (this._chartXField && this._chartYFields.length > 0) return; // Already configured
+    const textCols = this.columns.filter(c => c.type !== 'number' && !c.currency && c.type !== 'actions' && c.type !== 'boolean' && !c.field.startsWith('__'));
+    const numCols = this.columns.filter(c => c.type === 'number' || c.currency);
+    if (textCols.length > 0) this._chartXField = textCols[0].field;
+    if (numCols.length > 0) this._chartYFields = [numCols[0].field];
+  }
+
+  /** Aggregate data for chart */
+  private _getChartData() {
+    const rows = this._filteredRows.filter(r => !r['__zentto_totals__'] && !r['__zentto_group__'] && !r['__zentto_subtotal__']);
+    if (!this._chartXField || this._chartYFields.length === 0) return { labels: [] as string[], series: [] as { name: string; values: number[] }[] };
+
+    // Group by X field
+    const groups = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const key = String(row[this._chartXField] ?? '');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+
+    const labels = [...groups.keys()];
+    const series = this._chartYFields.map(yField => {
+      const col = this.columns.find(c => c.field === yField);
+      const values = labels.map(label => {
+        const groupRows = groups.get(label) || [];
+        const nums = groupRows.map(r => Number(r[yField]) || 0);
+        if (nums.length === 0) return 0;
+        switch (this._chartAgg) {
+          case 'sum': return nums.reduce((a, b) => a + b, 0);
+          case 'avg': return nums.reduce((a, b) => a + b, 0) / nums.length;
+          case 'count': return nums.length;
+          case 'min': return Math.min(...nums);
+          case 'max': return Math.max(...nums);
+          default: return nums.reduce((a, b) => a + b, 0);
+        }
+      });
+      return { name: col?.header || yField, values };
+    });
+
+    return { labels, series };
+  }
+
+  /** Render SVG chart */
+  private _renderChartSvg(width: number, height: number) {
+    const { labels, series } = this._getChartData();
+    if (labels.length === 0 || series.length === 0) return html`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--zg-text-muted)">${this._t('Configura los ejes para ver el grafico', 'Configure axes to see the chart')}</div>`;
+
+    const pad = { top: 40, right: 20, bottom: 60, left: 60 };
+    const w = width - pad.left - pad.right;
+    const h = height - pad.top - pad.bottom;
+    const allValues = series.flatMap(s => s.values);
+    const maxVal = Math.max(...allValues, 1);
+    const type = this._chartType;
+
+    // Y axis ticks
+    const yTicks = 5;
+    const yStep = maxVal / yTicks;
+
+    let chartSvg = '';
+
+    // Grid lines
+    for (let i = 0; i <= yTicks; i++) {
+      const y = pad.top + h - (i / yTicks) * h;
+      const val = (i * yStep);
+      chartSvg += `<line x1="${pad.left}" y1="${y}" x2="${pad.left + w}" y2="${y}" stroke="var(--zg-border)" stroke-dasharray="3,3"/>`;
+      chartSvg += `<text x="${pad.left - 8}" y="${y + 4}" text-anchor="end" fill="var(--zg-text-muted)" font-size="10">${val >= 1000 ? (val / 1000).toFixed(1) + 'k' : Math.round(val)}</text>`;
+    }
+
+    // X axis labels
+    const barGroupW = w / labels.length;
+    labels.forEach((label, i) => {
+      const x = pad.left + i * barGroupW + barGroupW / 2;
+      const displayLabel = label.length > 12 ? label.substring(0, 12) + '...' : label;
+      chartSvg += `<text x="${x}" y="${pad.top + h + 16}" text-anchor="middle" fill="var(--zg-text-muted)" font-size="10" transform="rotate(-30,${x},${pad.top + h + 16})">${displayLabel}</text>`;
+    });
+
+    if (type === 'bar' || type === 'stacked') {
+      const barW = barGroupW / (type === 'stacked' ? 1 : series.length) * 0.7;
+      series.forEach((s, si) => {
+        const color = this._chartColors[si % this._chartColors.length];
+        if (type === 'stacked') {
+          let cumulative = new Array(labels.length).fill(0);
+          labels.forEach((_, li) => {
+            const val = s.values[li];
+            const y0 = pad.top + h - (cumulative[li] / maxVal) * h;
+            const barH = (val / maxVal) * h;
+            chartSvg += `<rect x="${pad.left + li * barGroupW + barGroupW * 0.15}" y="${y0 - barH}" width="${barGroupW * 0.7}" height="${barH}" fill="${color}" rx="2" opacity="0.85"><title>${s.name}: ${val.toLocaleString()}</title></rect>`;
+            cumulative[li] += val;
+          });
+        } else {
+          labels.forEach((_, li) => {
+            const val = s.values[li];
+            const barH = (val / maxVal) * h;
+            const x = pad.left + li * barGroupW + si * barW + barGroupW * 0.15;
+            chartSvg += `<rect x="${x}" y="${pad.top + h - barH}" width="${barW * 0.9}" height="${barH}" fill="${color}" rx="2" opacity="0.85"><title>${s.name}: ${val.toLocaleString()}</title></rect>`;
+          });
+        }
+      });
+    } else if (type === 'line' || type === 'area' || type === 'combo') {
+      series.forEach((s, si) => {
+        const color = this._chartColors[si % this._chartColors.length];
+        const points = s.values.map((val, i) => {
+          const x = pad.left + i * barGroupW + barGroupW / 2;
+          const y = pad.top + h - (val / maxVal) * h;
+          return `${x},${y}`;
+        });
+        if (type === 'area' || type === 'combo') {
+          const first = pad.left + barGroupW / 2;
+          const last = pad.left + (labels.length - 1) * barGroupW + barGroupW / 2;
+          chartSvg += `<polygon points="${first},${pad.top + h} ${points.join(' ')} ${last},${pad.top + h}" fill="${color}" opacity="0.15"/>`;
+        }
+        chartSvg += `<polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`;
+        s.values.forEach((val, i) => {
+          const x = pad.left + i * barGroupW + barGroupW / 2;
+          const y = pad.top + h - (val / maxVal) * h;
+          chartSvg += `<circle cx="${x}" cy="${y}" r="4" fill="${color}" stroke="#fff" stroke-width="2"><title>${s.name}: ${val.toLocaleString()}</title></circle>`;
+        });
+        // Combo: also draw bars for first series
+        if (type === 'combo' && si === 0) {
+          labels.forEach((_, li) => {
+            const val = s.values[li];
+            const barH = (val / maxVal) * h;
+            chartSvg += `<rect x="${pad.left + li * barGroupW + barGroupW * 0.25}" y="${pad.top + h - barH}" width="${barGroupW * 0.5}" height="${barH}" fill="${color}" rx="2" opacity="0.3"/>`;
+          });
+        }
+      });
+    } else if (type === 'pie' || type === 'donut') {
+      const total = series[0]?.values.reduce((a, b) => a + b, 0) || 1;
+      const cx = width / 2, cy = height / 2, r = Math.min(w, h) / 2.5;
+      const ir = type === 'donut' ? r * 0.55 : 0;
+      let angle = -Math.PI / 2;
+      series[0]?.values.forEach((val, i) => {
+        const slice = (val / total) * Math.PI * 2;
+        const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+        const x2 = cx + r * Math.cos(angle + slice), y2 = cy + r * Math.sin(angle + slice);
+        const ix1 = cx + ir * Math.cos(angle), iy1 = cy + ir * Math.sin(angle);
+        const ix2 = cx + ir * Math.cos(angle + slice), iy2 = cy + ir * Math.sin(angle + slice);
+        const large = slice > Math.PI ? 1 : 0;
+        const color = this._chartColors[i % this._chartColors.length];
+        if (ir > 0) {
+          chartSvg += `<path d="M${ix1},${iy1} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${ix2},${iy2} A${ir},${ir} 0 ${large},0 ${ix1},${iy1}" fill="${color}" opacity="0.85"><title>${labels[i]}: ${val.toLocaleString()} (${((val / total) * 100).toFixed(1)}%)</title></path>`;
+        } else {
+          chartSvg += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z" fill="${color}" opacity="0.85"><title>${labels[i]}: ${val.toLocaleString()} (${((val / total) * 100).toFixed(1)}%)</title></path>`;
+        }
+        // Label
+        const mid = angle + slice / 2;
+        const lx = cx + (r + 16) * Math.cos(mid), ly = cy + (r + 16) * Math.sin(mid);
+        if (slice > 0.15) chartSvg += `<text x="${lx}" y="${ly}" text-anchor="middle" fill="var(--zg-text)" font-size="10" font-weight="600">${((val / total) * 100).toFixed(0)}%</text>`;
+        angle += slice;
+      });
+    } else if (type === 'scatter') {
+      if (series.length >= 2) {
+        const xs = series[0].values, ys = series[1].values;
+        const maxX = Math.max(...xs, 1), maxY = Math.max(...ys, 1);
+        xs.forEach((xv, i) => {
+          const x = pad.left + (xv / maxX) * w;
+          const y = pad.top + h - (ys[i] / maxY) * h;
+          const color = this._chartColors[0];
+          chartSvg += `<circle cx="${x}" cy="${y}" r="5" fill="${color}" opacity="0.7"><title>${labels[i]}: ${xv}, ${ys[i]}</title></circle>`;
+        });
+      }
+    }
+
+    // Title
+    if (this._chartTitle) {
+      chartSvg += `<text x="${width / 2}" y="20" text-anchor="middle" fill="var(--zg-text)" font-size="14" font-weight="700">${this._chartTitle}</text>`;
+    }
+
+    // Legend
+    if (this._chartShowLegend && (type !== 'pie' && type !== 'donut')) {
+      series.forEach((s, si) => {
+        const lx = pad.left + si * 120;
+        const color = this._chartColors[si % this._chartColors.length];
+        chartSvg += `<rect x="${lx}" y="${height - 14}" width="10" height="10" rx="2" fill="${color}"/>`;
+        chartSvg += `<text x="${lx + 14}" y="${height - 5}" fill="var(--zg-text-secondary)" font-size="10">${s.name}</text>`;
+      });
+    }
+    if (this._chartShowLegend && (type === 'pie' || type === 'donut')) {
+      labels.forEach((label, i) => {
+        const lx = pad.left + (i % 4) * (w / 4);
+        const ly = height - 14 - Math.floor(i / 4) * 16;
+        const color = this._chartColors[i % this._chartColors.length];
+        chartSvg += `<rect x="${lx}" y="${ly}" width="10" height="10" rx="2" fill="${color}"/>`;
+        chartSvg += `<text x="${lx + 14}" y="${ly + 9}" fill="var(--zg-text-secondary)" font-size="10">${label.length > 15 ? label.substring(0, 15) + '...' : label}</text>`;
+      });
+    }
+
+    return html`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${width} ${height}" class="zg-chart-svg" style="background:var(--zg-bg)">${unsafeHTML(chartSvg)}</svg>`;
+  }
+
+  /** Copy chart as PNG to clipboard */
+  private async _copyChartAsImage() {
+    const svgEl = this.shadowRoot?.querySelector('.zg-chart-svg') as SVGElement;
+    if (!svgEl) return;
+    const svgData = new XMLSerializer().serializeToString(svgEl);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    const blob = new Blob([svgData], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    img.onload = async () => {
+      canvas.width = img.width * 2;
+      canvas.height = img.height * 2;
+      ctx!.scale(2, 2);
+      ctx!.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      try {
+        const pngBlob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+        this._dispatchGridEvent('chart-copied', {});
+      } catch { /* clipboard not available */ }
+    };
+    img.src = url;
+  }
+
+  /** Toggle Y field */
+  private _toggleChartYField(field: string) {
+    if (this._chartYFields.includes(field)) {
+      this._chartYFields = this._chartYFields.filter(f => f !== field);
+    } else {
+      this._chartYFields = [...this._chartYFields, field];
+    }
+  }
+
+  private _renderChartView() {
+    const textCols = this.columns.filter(c => c.type !== 'number' && !c.currency && c.type !== 'actions' && c.type !== 'boolean' && !c.field.startsWith('__'));
+    const numCols = this.columns.filter(c => c.type === 'number' || c.currency);
+    const chartTypes: { id: string; label: string }[] = [
+      { id: 'bar', label: this._t('Barras', 'Bar') },
+      { id: 'line', label: this._t('Lineas', 'Line') },
+      { id: 'area', label: this._t('Area', 'Area') },
+      { id: 'pie', label: 'Pie' },
+      { id: 'donut', label: 'Donut' },
+      { id: 'stacked', label: this._t('Apilado', 'Stacked') },
+      { id: 'combo', label: 'Combo' },
+      { id: 'scatter', label: 'Scatter' },
+    ];
+    const aggOptions = [
+      { id: 'sum', label: this._t('Suma', 'Sum') },
+      { id: 'avg', label: this._t('Promedio', 'Avg') },
+      { id: 'count', label: this._t('Conteo', 'Count') },
+      { id: 'min', label: 'Min' },
+      { id: 'max', label: 'Max' },
+    ];
+
+    return html`
+      <div class="zg-table-wrapper" style="display:flex;flex-direction:column;overflow:hidden;height:100%">
+        <!-- Config bar -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-bottom:1px solid var(--zg-border);background:var(--zg-surface);align-items:center;font-size:12px">
+          <!-- Chart type -->
+          <div style="display:flex;gap:2px">
+            ${chartTypes.map(t => html`
+              <button class="zg-config-fw-tab ${this._chartType === t.id ? 'zg-config-fw-tab--active' : ''}"
+                      @click=${() => { this._chartType = t.id as any; }}>${t.label}</button>
+            `)}
+          </div>
+          <span class="zg-toolbar-sep"></span>
+
+          <!-- X axis -->
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-weight:600;color:var(--zg-text-muted);font-size:10px">X:</span>
+            <select class="zg-config-select" style="width:auto;min-width:100px" .value=${this._chartXField} @change=${(e: Event) => { this._chartXField = (e.target as HTMLSelectElement).value; }}>
+              ${textCols.map(c => html`<option value=${c.field} ?selected=${c.field === this._chartXField}>${c.header || c.field}</option>`)}
+            </select>
+          </div>
+
+          <!-- Y axes (multi-select) -->
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-weight:600;color:var(--zg-text-muted);font-size:10px">Y:</span>
+            ${numCols.map((c, i) => html`
+              <label style="display:flex;align-items:center;gap:2px;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid ${this._chartYFields.includes(c.field) ? this._chartColors[this._chartYFields.indexOf(c.field) % this._chartColors.length] : 'var(--zg-border)'};background:${this._chartYFields.includes(c.field) ? this._chartColors[this._chartYFields.indexOf(c.field) % this._chartColors.length] + '18' : 'transparent'};transition:all 0.15s">
+                <input type="checkbox" .checked=${this._chartYFields.includes(c.field)} @change=${() => this._toggleChartYField(c.field)} style="width:12px;height:12px;accent-color:${this._chartColors[i % this._chartColors.length]}">
+                <span style="font-size:11px">${c.header || c.field}</span>
+              </label>
+            `)}
+          </div>
+
+          <!-- Aggregation -->
+          <select class="zg-config-select" style="width:auto;min-width:80px" .value=${this._chartAgg} @change=${(e: Event) => { this._chartAgg = (e.target as HTMLSelectElement).value as any; }}>
+            ${aggOptions.map(a => html`<option value=${a.id} ?selected=${a.id === this._chartAgg}>${a.label}</option>`)}
+          </select>
+
+          <span class="zg-toolbar-sep"></span>
+
+          <!-- Title input -->
+          <input type="text" class="zg-find-input" style="width:150px" placeholder="${this._t('Titulo del grafico', 'Chart title')}" .value=${this._chartTitle} @input=${(e: InputEvent) => { this._chartTitle = (e.target as HTMLInputElement).value; }}>
+
+          <!-- Legend toggle -->
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px">
+            <input type="checkbox" .checked=${this._chartShowLegend} @change=${(e: Event) => { this._chartShowLegend = (e.target as HTMLInputElement).checked; }} style="width:12px;height:12px;accent-color:var(--zg-primary)">
+            ${this._t('Leyenda', 'Legend')}
+          </label>
+
+          <span style="flex:1"></span>
+
+          <!-- Actions -->
+          <button class="zg-btn-icon" @click=${() => this._copyChartAsImage()} title="${this._t('Copiar como imagen', 'Copy as image')}">${this._iconHtml('copy')}</button>
+          <button class="zg-btn-icon" @click=${() => { this._chartShowHelp = !this._chartShowHelp; }} title="${this._t('Ayuda', 'Help')}">${this._iconHtml('info')}</button>
+        </div>
+
+        <!-- Help panel -->
+        ${this._chartShowHelp ? html`
+          <div style="padding:12px 16px;background:var(--zg-primary-soft);border-bottom:1px solid var(--zg-border);font-size:12px;line-height:1.6">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong style="font-size:13px">${this._t('Como crear graficos utiles', 'How to create useful charts')}</strong>
+              <button class="zg-btn-icon" @click=${() => { this._chartShowHelp = false; }}>${this._iconHtml('close')}</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Comparar categorias', 'Compare categories')}</strong><br>
+                ${this._t('Usa Barras con X=Categoria y Y=Ventas. Agregacion: Suma.', 'Use Bar with X=Category and Y=Sales. Aggregation: Sum.')}
+              </div>
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Ver tendencias', 'See trends')}</strong><br>
+                ${this._t('Usa Lineas con X=Fecha y Y=Total. Agregacion: Suma.', 'Use Line with X=Date and Y=Total. Aggregation: Sum.')}
+              </div>
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Distribucion porcentual', 'Percentage distribution')}</strong><br>
+                ${this._t('Usa Pie/Donut con X=Estado y Y=Cantidad. Agregacion: Conteo.', 'Use Pie/Donut with X=Status and Y=Count. Aggregation: Count.')}
+              </div>
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Comparar multiples valores', 'Compare multiple values')}</strong><br>
+                ${this._t('Selecciona varios campos Y (Costo + Precio). Usa Combo o Agrupado.', 'Select multiple Y fields (Cost + Price). Use Combo or Grouped.')}
+              </div>
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Para desarrolladores', 'For developers')}</strong><br>
+                <code style="font-size:10px;background:#1e1e1e;color:#d4d4d4;padding:2px 4px;border-radius:3px">el.chartConfig = { type: 'bar', xField: 'categoria', yFields: ['stock'], agg: 'sum' }</code>
+              </div>
+              <div style="padding:8px;background:var(--zg-bg);border-radius:6px;border:1px solid var(--zg-border)">
+                <strong>${this._t('Copiar grafico', 'Copy chart')}</strong><br>
+                ${this._t('Click en el boton de copiar para obtener una imagen PNG del grafico.', 'Click the copy button to get a PNG image of the chart.')}
+              </div>
+            </div>
+          </div>
+        ` : nothing}
+
+        <!-- Chart area -->
+        <div style="flex:1;padding:12px;overflow:auto;display:flex;align-items:center;justify-content:center;min-height:300px">
+          ${this._renderChartSvg(800, 450)}
+        </div>
+      </div>
+    `;
+  }
+
   // ─── View: Form (one record at a time) ─────────────────────────
 
   private _renderFormView() {
@@ -4107,11 +4471,11 @@ onMounted(() => {
           ` : nothing}
           <span class="zg-toolbar-sep"></span>
 
-          <!-- Charts (v0.7) -->
+          <!-- Charts view -->
           ${this.enableCharts ? html`
-            <button class="zg-btn-icon ${this._chartOpen ? 'zg-btn-icon--active' : ''}"
-                    @click=${() => this._toggleChartPanel()}
-                    title="${this._t('Graficos', 'Charts')}">${this._iconHtml('chart')}</button>
+            <button class="zg-btn-icon ${this.viewMode === 'chart' ? 'zg-btn-icon--active' : ''}"
+                    @click=${() => { this.viewMode = this.viewMode === 'chart' ? 'table' : 'chart'; this._autoConfigChart(); }}
+                    title="${this._t('Vista graficos', 'Charts view')}">${this._iconHtml('chart')}</button>
           ` : nothing}
 
           <!-- Print (v0.7) -->

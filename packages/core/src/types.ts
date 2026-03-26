@@ -430,7 +430,7 @@ export interface GridOptions {
 // ─── v0.7 — Chart Types ─────────────────────────────────
 
 /** Chart type for built-in SVG charts */
-export type ChartType = 'bar' | 'line' | 'pie' | 'area' | 'donut';
+export type ChartType = 'bar' | 'line' | 'pie' | 'area' | 'donut' | 'scatter' | 'stacked' | 'combo';
 
 /** Configuration for generating a chart from grid data */
 export interface ChartConfig {

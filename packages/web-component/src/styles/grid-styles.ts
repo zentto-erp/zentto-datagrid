@@ -450,6 +450,7 @@ export const gridStyles = css`
   .zg-row-totals { background: var(--zg-surface); font-weight: 700; }
 
   .zg-td {
+    position: relative;
     padding: 0 calc(var(--zg-grid-size) * 1.5);
     height: var(--zg-row-height);
     border-bottom: 1px solid var(--zg-border);
@@ -2023,25 +2024,7 @@ export const gridStyles = css`
     pointer-events: auto;
     cursor: help;
   }
-  .zg-note-indicator::after {
-    content: attr(title);
-    position: absolute;
-    top: 8px;
-    right: 0;
-    background: #1c1e21;
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    white-space: pre-wrap;
-    max-width: 200px;
-    z-index: 100;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
-  }
-  .zg-note-indicator:hover::after { opacity: 1; }
+  /* Tooltip handled by native title attribute */
 
   /* ═══════════════════════════════════════════════
      v0.7 — NOTE EDITOR MODAL
