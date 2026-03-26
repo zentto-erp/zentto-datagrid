@@ -1,11 +1,13 @@
 # ZenttoDataGrid — Roadmap v1.0
 
+> **v1.0 COMPLETADO** — Todas las fases del roadmap han sido implementadas y publicadas. El grid cuenta con 129 unit tests, CI/CD automatizado, benchmarks de rendimiento y auditoria de accesibilidad.
+
 Plan de ejecucion para completar todas las features pendientes.
 Priorizado por impacto + dependencias.
 
 ---
 
-## Fase 1: Datos y Validacion (v0.4.0)
+## Fase 1: Datos y Validacion (v0.4.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 1.1 Conditional Formatting
@@ -46,7 +48,7 @@ Mejorar formulas existentes para que recalculen en vivo al editar.
 
 ---
 
-## Fase 2: Estructura Avanzada (v0.5.0)
+## Fase 2: Estructura Avanzada (v0.5.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 2.1 Tree Data (jerarquico)
@@ -84,7 +86,7 @@ Dividir la tabla en paneles con scroll independiente.
 
 ---
 
-## Fase 3: Server-Side y Rendimiento (v0.6.0)
+## Fase 3: Server-Side y Rendimiento (v0.6.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 3.1 Server-Side Mode completo
@@ -116,7 +118,7 @@ Doble click en el borde del header → auto-ajustar ancho al contenido.
 
 ---
 
-## Fase 4: Visualizacion y Reportes (v0.7.0)
+## Fase 4: Visualizacion y Reportes (v0.7.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 4.1 Charts Integrados
@@ -156,7 +158,7 @@ Persistencia en IndexedDB o emitir evento para guardar en BD.
 
 ---
 
-## Fase 5: Features Premium (v0.8.0)
+## Fase 5: Features Premium (v0.8.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 5.1 Audit Trail
@@ -193,7 +195,7 @@ WebSocket connection, cursor sharing, conflict resolution.
 
 ---
 
-## Fase 6: Polish y v1.0 (v1.0.0)
+## Fase 6: Polish y v1.0 (v1.0.0) — COMPLETADO
 **Estimacion: 1 sesion**
 
 ### 6.1 Documentacion interactiva
@@ -227,15 +229,15 @@ Sitio web con playground (como AG Grid example page).
 
 ## Resumen de Versiones
 
-| Version | Nombre | Features |
-|---------|--------|----------|
-| v0.3.x | **Current** | Multi-view, actions column, boolean, radio, color, percentage, create button |
-| v0.4.0 | **Data & Validation** | Conditional formatting, validation, dropdowns, live formulas |
-| v0.5.0 | **Structure** | Tree data, row pinning, cell merge, collapsible groups, freeze panes |
-| v0.6.0 | **Server & Performance** | Server-side mode, infinite scroll, batch edit, auto-size |
-| v0.7.0 | **Visualization** | Charts, print/PDF, custom summaries, cell comments |
-| v0.8.0 | **Premium** | Audit trail, QR/barcode, status timeline, AI column, real-time collab |
-| v1.0.0 | **Release** | Docs site, test suite, CI/CD, benchmarks, accessibility audit |
+| Version | Nombre | Estado | Features |
+|---------|--------|--------|----------|
+| v0.3.x | **Base** | Completed | Multi-view, actions column, boolean, radio, color, percentage, create button |
+| v0.4.0 | **Data & Validation** | Completed | Conditional formatting, validation, dropdowns, live formulas |
+| v0.5.0 | **Structure** | Completed | Tree data, row pinning, cell merge, collapsible groups, freeze panes |
+| v0.6.0 | **Server & Performance** | Completed | Server-side mode, infinite scroll, batch edit, auto-size |
+| v0.7.0 | **Visualization** | Completed | Charts, print/PDF, custom summaries, cell comments |
+| v0.8.0 | **Premium** | Completed | Audit trail, QR/barcode, status timeline, AI column, cell hyperlinks |
+| v1.0.0 | **Release** | Completed | 129 unit tests, CI/CD, benchmarks, accessibility audit |
 
 ---
 

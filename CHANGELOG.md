@@ -2,6 +2,56 @@
 
 All notable changes to `@zentto/datagrid` will be documented in this file.
 
+## [1.0.0] - 2026-03-25
+
+### Added
+- **129 unit tests** — Vitest test suite covering sort, filter, aggregate, group, paginate, formula, pivot, clipboard, find
+- **CI/CD** — GitHub Actions workflow: test on PR, auto-publish to npm on version bump
+- **Performance benchmarks** — Sort/filter/group/pivot benchmarks at 1K/10K/100K rows
+- **Accessibility audit** — ARIA roles (grid, row, columnheader, gridcell), aria-sort, aria-selected, aria-expanded, aria-level, aria-colcount, focus-visible styles
+
+## [0.8.0] - 2026-03-25
+
+### Added
+- **Audit Trail** — `enable-audit` tracks who changed what, when. Blue dot indicator, hover tooltip with history
+- **QR/Barcode in cell** — `barcode: 'qr' | 'code128'` renders SVG QR codes and Code 128 barcodes inline
+- **Status Timeline** — `timeline: true` + `timelineField` renders horizontal mini-timeline in cell
+- **AI Column** — `ai: { prompt, fields }` for generative columns. Event-driven, with cache and loading states
+- **Cell Hyperlinks** — `hyperlink: true` + `hyperlinkPattern` for clickable cell links with URL templates
+
+## [0.7.0] - 2026-03-25
+
+### Added
+- **Charts (SVG, zero deps)** — `enable-charts` adds toolbar button. 5 types: bar, line, pie, area, donut. Pure SVG, responsive
+- **Print/PDF** — `enable-print` adds toolbar button. Opens print-optimized window with repeated headers, page breaks, auto landscape
+- **Custom Summary Footer** — `aggregationLabel` per column. `computeTotals()` now supports avg, count, min, max per column
+- **Cell Comments/Notes** — `enable-comments` + `cellNotes`. Orange triangle indicator, hover tooltip, right-click add/edit/delete
+
+## [0.6.0] - 2026-03-25
+
+### Added
+- **Server-Side Mode** — `pagination-mode="server"` delegates sort/filter/search/group/pagination to backend. `server-request` event
+- **Infinite Scroll** — `enable-infinite-scroll` with IntersectionObserver sentinel. `load-more` event, loading/done states
+- **Batch Edit** — Ctrl+D fill-down from selected range. Applies value to all selected cells with `batch-edit` event
+- **Column Auto-Size** — Double-click resize handle auto-fits to content. Also in header menu
+
+## [0.5.0] - 2026-03-25
+
+### Added
+- **Tree Data** — `enable-tree-data` with `tree-id-field` and `tree-parent-field`. Indent, expand/collapse, folder icons
+- **Row Pinning** — `pinnedRows: { top: [...], bottom: [...] }` keeps rows fixed during scroll
+- **Cell Merge** — `merge: true` on column auto-merges consecutive cells with same value (rowspan)
+- **Collapsible Column Groups** — `collapsible: true` on column groups. Toggle to show/hide children
+- **Frozen/Split Panes** — `freeze-rows` and `freeze-cols` for sticky rows/columns during scroll
+
+## [0.4.0] - 2026-03-25
+
+### Added
+- **Conditional Formatting** — `conditionalFormat` rules on columns. 10 operators (eq, gt, lt, between, etc). Style cells by value
+- **Data Validation** — `validation` rules: email, number, date, regex, custom. Red border + error tooltip on invalid
+- **Dropdown Cells** — `dropdown` on columns renders select in edit mode. Supports string[] or {value, label, color}[]
+- **Live Formula Recalculation** — `formula` on columns auto-recalculates when cells are edited
+
 ## [0.3.6] - 2026-03-26
 
 ### Added
