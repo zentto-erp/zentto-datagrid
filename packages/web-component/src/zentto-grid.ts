@@ -44,8 +44,9 @@ import {
   generateQrSvg,
   generateBarcodeSvg,
   generateTimelineSvg,
-  // v0.4 — Conditional Formatting
+  // v0.4 — Conditional Formatting & Validation
   evaluateConditionalFormat,
+  validateValue,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -447,6 +448,9 @@ export class ZenttoGrid extends LitElement {
   private _auditTrail = new AuditTrail();
   private _aiCache = new Map<string, string>();
   @state() private _aiLoading = new Set<string>();
+
+  // v0.4 — Validation errors: key = `${rowKey}_${field}`, value = error message
+  @state() private _validationErrors: Record<string, string> = {};
 
   // v0.2 — Range Selection state
   @state() private _rangeAnchor: { rowIdx: number; colIdx: number } | null = null;
@@ -1331,7 +1335,35 @@ export class ZenttoGrid extends LitElement {
     if (!currentRow) return;
 
     const oldValue = currentRow[field];
-    if (newValue === oldValue) return;
+    if (newValue === oldValue) {
+      // Clear any existing validation error for this cell
+      const vKey = `${rowKey}_${field}`;
+      if (this._validationErrors[vKey]) {
+        const next = { ...this._validationErrors };
+        delete next[vKey];
+        this._validationErrors = next;
+      }
+      return;
+    }
+
+    // v0.4 — Data Validation
+    if (col?.validation) {
+      const error = validateValue(newValue, col.validation, currentRow);
+      const vKey = `${rowKey}_${field}`;
+      if (error) {
+        // Store error and reject the edit (revert to old value)
+        this._validationErrors = { ...this._validationErrors, [vKey]: error };
+        this._dispatchGridEvent('validation-error', { rowKey, field, value: newValue, error });
+        return; // Don't apply the change
+      } else {
+        // Clear error if previously set
+        if (this._validationErrors[vKey]) {
+          const next = { ...this._validationErrors };
+          delete next[vKey];
+          this._validationErrors = next;
+        }
+      }
+    }
 
     // v0.8 — Audit trail
     if (this.enableAudit) {
@@ -3102,6 +3134,10 @@ export class ZenttoGrid extends LitElement {
                         ? `position:sticky;left:${cIdx * 120}px;z-index:2;background:var(--zg-row-bg, var(--zg-bg));`
                         : '';
 
+                      // v0.4 — Validation error
+                      const vErrKey = `${this._getRowKey(row)}_${col.field}`;
+                      const validationError = this._validationErrors[vErrKey] || '';
+
                       // v0.5 — Tree indent for first data column
                       const isFirstCol = cIdx === 0;
                       const treeLevel = (row as any)['__zentto_tree_level__'] as number | undefined;
@@ -3109,7 +3145,7 @@ export class ZenttoGrid extends LitElement {
                       const treeIndentPx = isTreeRow && isFirstCol ? treeLevel * this.treeIndent : 0;
 
                       return html`
-                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''} ${this.freezeCols > 0 && cIdx < this.freezeCols ? 'zg-frozen-col' : ''}"
+                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''} ${this.freezeCols > 0 && cIdx < this.freezeCols ? 'zg-frozen-col' : ''} ${validationError ? 'zg-td--validation-error' : ''}"
                             style="${pinStyle}${freezeStyle}"
                             role="gridcell"
                             rowspan="${mergeRowspan > 1 ? mergeRowspan : nothing}"
@@ -3151,6 +3187,9 @@ export class ZenttoGrid extends LitElement {
                           ` : this._renderCellContent(val, col, row)}
                           ${this.enableComments && this._hasNote(row, col.field) ? html`
                             <span class="zg-note-indicator" title="${this._getNote(row, col.field)}"></span>
+                          ` : nothing}
+                          ${validationError ? html`
+                            <span class="zg-validation-indicator" title="${validationError}"></span>
                           ` : nothing}
                         </td>
                       `;
