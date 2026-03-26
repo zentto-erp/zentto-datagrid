@@ -393,7 +393,7 @@ export class ZenttoGrid extends LitElement {
   // Configurator panel state
   @state() private _configOpen = false;
   @state() private _formIndex = 0; // Current record index in form view
-  @state() private _configTab: 'features' | 'pivot' | 'groups' | 'appearance' | 'code' = 'features';
+  @state() private _configTab: 'features' | 'advanced' | 'pivot' | 'groups' | 'appearance' | 'code' = 'features';
 
   // Context Menu state
   @state() private _contextMenu: { x: number; y: number; row: GridRow; field: string; value: unknown } | null = null;
@@ -3457,8 +3457,9 @@ export class ZenttoGrid extends LitElement {
 
   private _renderConfigurator() {
     const tab = this._configTab;
-    const tabs: { id: 'features' | 'pivot' | 'groups' | 'appearance' | 'code'; icon: string; label: string; tooltip: string }[] = [
+    const tabs: { id: 'features' | 'advanced' | 'pivot' | 'groups' | 'appearance' | 'code'; icon: string; label: string; tooltip: string }[] = [
       { id: 'features', icon: 'columns', label: this._t('Funciones', 'Features'), tooltip: this._t('Activar/desactivar funcionalidades', 'Toggle features on/off') },
+      { id: 'advanced', icon: 'sparkle', label: this._t('Avanzado', 'Advanced'), tooltip: this._t('Features avanzados v0.4-v0.8', 'Advanced features v0.4-v0.8') },
       { id: 'pivot', icon: 'pivot', label: 'Pivot', tooltip: this._t('Tabla dinamica con filas, columnas y valores', 'Dynamic table with rows, columns and values') },
       { id: 'groups', icon: 'drag', label: this._t('Grupos', 'Groups'), tooltip: this._t('Agrupar filas por campo', 'Group rows by field') },
       { id: 'appearance', icon: 'density', label: this._t('Tema', 'Theme'), tooltip: this._t('Tema, densidad e idioma', 'Theme, density and language') },
@@ -3482,6 +3483,7 @@ export class ZenttoGrid extends LitElement {
 
         <div class="zg-config-body">
           ${tab === 'features' ? this._renderConfigFeatures() : nothing}
+          ${tab === 'advanced' ? this._renderConfigAdvanced() : nothing}
           ${tab === 'pivot' ? this._renderConfigPivot() : nothing}
           ${tab === 'groups' ? this._renderConfigGroups() : nothing}
           ${tab === 'appearance' ? this._renderConfigAppearance() : nothing}
@@ -3512,13 +3514,6 @@ export class ZenttoGrid extends LitElement {
       ${this._renderConfigSwitch(this._t('Virtual Scroll', 'Virtual Scroll'), this.enableVirtualScroll, v => { this.enableVirtualScroll = v; }, this._t('Rendimiento para 100K+ filas', 'Performance for 100K+ rows'))}
 
       <div class="zg-config-divider"></div>
-      <div class="zg-config-section">v0.2</div>
-      ${this._renderConfigSwitch(this._t('Virtual Scroll (100K+)', 'Virtual Scroll (100K+)'), this.enableVirtualScroll, v => { this.enableVirtualScroll = v; }, this._t('Renderiza solo filas visibles', 'Renders only visible rows'))}
-      ${this._renderConfigSwitch(this._t('Deshacer/Rehacer', 'Undo/Redo'), this.enableUndoRedo, v => { this.enableUndoRedo = v; }, 'Ctrl+Z / Ctrl+Y')}
-      ${this._renderConfigSwitch(this._t('Seleccion de rango', 'Range Selection'), this.enableRangeSelection, v => { this.enableRangeSelection = v; }, this._t('Seleccion tipo Excel con Shift+Click', 'Excel-like selection with Shift+Click'))}
-      ${this._renderConfigSwitch(this._t('Pegar desde Excel', 'Paste from Excel'), this.enablePaste, v => { this.enablePaste = v; }, 'Ctrl+V')}
-
-      <div class="zg-config-divider"></div>
       <div class="zg-config-section">${this._t('Barra de herramientas', 'Toolbar')}</div>
       ${this._renderConfigSwitch(this._t('Mostrar toolbar', 'Show toolbar'), this.enableToolbar, v => { this.enableToolbar = v; }, this._t('Barra superior con busqueda y botones', 'Top bar with search and buttons'))}
       ${this.enableToolbar ? html`
@@ -3536,6 +3531,31 @@ export class ZenttoGrid extends LitElement {
       ${this._renderConfigSwitch(this._t('Vista formulario', 'Form view'), this.showViewForm, v => { this.showViewForm = v; }, this._t('Un registro a la vez', 'One record at a time'))}
       ${this._renderConfigSwitch(this._t('Vista tarjetas', 'Cards view'), this.showViewCards, v => { this.showViewCards = v; }, this._t('Grid de tarjetas', 'Card grid'))}
       ${this._renderConfigSwitch(this._t('Vista kanban', 'Kanban view'), this.showViewKanban, v => { this.showViewKanban = v; }, this._t('Columnas por estado', 'Columns by status'))}
+
+    `;
+  }
+
+  // ─── Tab: Advanced (v0.4-v0.8) ──────────────────────
+  private _renderConfigAdvanced() {
+    return html`
+      <div class="zg-config-section">v0.5 — ${this._t('Estructura', 'Structure')}</div>
+      ${this._renderConfigSwitch(this._t('Datos jerarquicos', 'Tree data'), this.enableTreeData, v => { this.enableTreeData = v; }, this._t('Expandir/colapsar nodos padre-hijo', 'Expand/collapse parent-child nodes'))}
+      ${this._renderConfigSwitch(this._t('Congelar filas', 'Freeze rows'), this.freezeRows > 0, v => { this.freezeRows = v ? 1 : 0; }, this._t('Filas fijas al hacer scroll vertical', 'Rows stay fixed during vertical scroll'))}
+      ${this._renderConfigSwitch(this._t('Congelar columnas', 'Freeze columns'), this.freezeCols > 0, v => { this.freezeCols = v ? 2 : 0; }, this._t('Columnas fijas al hacer scroll horizontal', 'Columns stay fixed during horizontal scroll'))}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">v0.6 — ${this._t('Servidor', 'Server')}</div>
+      ${this._renderConfigSwitch(this._t('Scroll infinito', 'Infinite scroll'), this.enableInfiniteScroll, v => { this.enableInfiniteScroll = v; }, this._t('Cargar mas filas al hacer scroll', 'Load more rows on scroll'))}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">v0.7 — ${this._t('Visualizacion', 'Visualization')}</div>
+      ${this._renderConfigSwitch(this._t('Graficos', 'Charts'), this.enableCharts, v => { this.enableCharts = v; }, this._t('Boton de graficos en toolbar (bar, line, pie, donut)', 'Chart button in toolbar (bar, line, pie, donut)'))}
+      ${this._renderConfigSwitch(this._t('Imprimir', 'Print'), this.enablePrint, v => { this.enablePrint = v; }, this._t('Boton de impresion en toolbar', 'Print button in toolbar'))}
+      ${this._renderConfigSwitch(this._t('Notas en celdas', 'Cell comments'), this.enableComments, v => { this.enableComments = v; }, this._t('Click derecho para agregar notas con indicador naranja', 'Right-click to add notes with orange indicator'))}
+
+      <div class="zg-config-divider"></div>
+      <div class="zg-config-section">v0.8 — Premium</div>
+      ${this._renderConfigSwitch(this._t('Auditoria', 'Audit trail'), this.enableAudit, v => { this.enableAudit = v; }, this._t('Rastrea quien cambio que y cuando. Punto azul en celdas editadas', 'Track who changed what and when. Blue dot on edited cells'))}
     `;
   }
 
