@@ -1740,4 +1740,320 @@ export const gridStyles = css`
     .zg-detail-panel { padding: 8px 12px 8px 40px; }
     .zg-group-drop-zone { flex-wrap: wrap; }
   }
+
+
+  /* ═══════════════════════════════════════════════
+     v0.5.0 — TREE DATA
+     ═══════════════════════════════════════════════ */
+
+  .zg-tree-indent {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    vertical-align: middle;
+  }
+
+  .zg-tree-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--zg-text-secondary);
+    border-radius: var(--zg-radius);
+    transition: background 0.15s;
+  }
+
+  .zg-tree-chevron:hover {
+    background: var(--zg-header-hover);
+    color: var(--zg-primary);
+  }
+
+  .zg-tree-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--zg-text-secondary);
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.5.0 — PINNED ROWS (Top / Bottom)
+     ═══════════════════════════════════════════════ */
+
+  .zg-pinned-top {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  .zg-row-pinned-top {
+    background: var(--zg-surface) !important;
+    border-bottom: 2px solid var(--zg-border-strong);
+    font-weight: 500;
+  }
+
+  .zg-td-pinned-top {
+    background: var(--zg-surface);
+  }
+
+  .zg-pinned-bottom {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+  }
+
+  .zg-row-pinned-bottom {
+    background: var(--zg-surface) !important;
+    border-top: 2px solid var(--zg-border-strong);
+    font-weight: 500;
+  }
+
+  .zg-td-pinned-bottom {
+    background: var(--zg-surface);
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.5.0 — FROZEN / SPLIT PANES
+     ═══════════════════════════════════════════════ */
+
+  .zg-frozen-col {
+    position: sticky;
+    z-index: 2;
+    background: var(--zg-row-bg, var(--zg-bg));
+  }
+
+  .zg-frozen-col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -4px;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(to right, rgba(0,0,0,0.06), transparent);
+    pointer-events: none;
+  }
+
+  .zg-row-alt .zg-frozen-col {
+    background: var(--zg-row-stripe);
+  }
+
+  .zg-row--selected .zg-frozen-col {
+    background: var(--zg-row-selected);
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.5.0 — CELL MERGE
+     ═══════════════════════════════════════════════ */
+
+  td[rowspan] {
+    vertical-align: top;
+    border-bottom: 1px solid var(--zg-border);
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.5.0 — COLLAPSIBLE COLUMN GROUPS
+     ═══════════════════════════════════════════════ */
+
+  .zg-group-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--zg-radius);
+    color: var(--zg-text-secondary);
+    transition: background 0.15s, color 0.15s;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  .zg-group-collapse-toggle:hover {
+    background: var(--zg-primary-soft);
+    color: var(--zg-primary);
+  }
+
+  .zg-th-group--collapsed {
+    background: var(--zg-primary-soft);
+    font-style: italic;
+  }
+
+  /* Dark mode overrides for v0.5 features */
+  .zg-theme-dark .zg-row-pinned-top,
+  .zg-theme-dark .zg-td-pinned-top {
+    background: #242830 !important;
+  }
+  .zg-theme-dark .zg-row-pinned-bottom,
+  .zg-theme-dark .zg-td-pinned-bottom {
+    background: #242830 !important;
+  }
+  .zg-theme-dark .zg-frozen-col {
+    background: #1b1f27;
+  }
+  .zg-theme-dark .zg-row-alt .zg-frozen-col {
+    background: #21252d;
+  }
+  .zg-theme-dark .zg-frozen-col::after {
+    background: linear-gradient(to right, rgba(255,255,255,0.06), transparent);
+  }
+
+
+  /* ═══════════════════════════════════════════════
+     v0.7 — CHART PANEL
+     ═══════════════════════════════════════════════ */
+
+  .zg-chart-panel {
+    border-bottom: 1px solid var(--zg-border);
+    background: var(--zg-bg);
+  }
+  .zg-chart-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--zg-border);
+    background: var(--zg-surface);
+    gap: 8px;
+  }
+  .zg-chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .zg-chart-select {
+    padding: 4px 8px;
+    border: 1px solid var(--zg-border-strong);
+    border-radius: var(--zg-radius);
+    background: var(--zg-input-bg);
+    color: var(--zg-text);
+    font-size: 12px;
+    font-family: var(--zg-font-family);
+    cursor: pointer;
+  }
+  .zg-chart-select:focus {
+    outline: none;
+    box-shadow: var(--zg-focus-ring);
+    border-color: var(--zg-primary);
+  }
+  .zg-chart-values-label {
+    font-size: 11px;
+    color: var(--zg-text-secondary);
+    font-weight: 600;
+    margin-left: 4px;
+  }
+  .zg-chart-value-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--zg-text-secondary);
+    cursor: pointer;
+  }
+  .zg-chart-value-toggle input { accent-color: var(--zg-primary); }
+  .zg-chart-body {
+    padding: 12px;
+    min-height: 200px;
+    max-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .zg-chart-body svg { max-width: 100%; max-height: 350px; }
+  .zg-theme-dark .zg-chart-select {
+    background: #181c24;
+    color: #dce0e5;
+    border-color: rgba(255,255,255,0.14);
+  }
+
+  /* ═══════════════════════════════════════════════
+     v0.7 — CELL NOTE INDICATOR & TOOLTIP
+     ═══════════════════════════════════════════════ */
+
+  .zg-note-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-top: 6px solid #f59e0b;
+    pointer-events: auto;
+    cursor: help;
+  }
+  .zg-note-indicator::after {
+    content: attr(title);
+    position: absolute;
+    top: 8px;
+    right: 0;
+    background: #1c1e21;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: pre-wrap;
+    max-width: 200px;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+  }
+  .zg-note-indicator:hover::after { opacity: 1; }
+
+  /* ═══════════════════════════════════════════════
+     v0.7 — NOTE EDITOR MODAL
+     ═══════════════════════════════════════════════ */
+
+  .zg-note-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 200;
+  }
+  .zg-note-editor {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--zg-bg);
+    border: 1px solid var(--zg-border);
+    border-radius: var(--zg-radius-lg);
+    box-shadow: var(--zg-shadow-lg);
+    z-index: 201;
+    width: 320px;
+    max-width: 90%;
+  }
+  .zg-note-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--zg-border);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .zg-note-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px 14px;
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: var(--zg-font-family);
+    font-size: var(--zg-font-size);
+    color: var(--zg-text);
+    background: var(--zg-bg);
+  }
+  .zg-note-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--zg-border);
+  }
+  .zg-theme-dark .zg-note-editor { background: #242830; color: #dce0e5; }
+  .zg-theme-dark .zg-note-textarea { background: #1b1f27; color: #dce0e5; }
 `;

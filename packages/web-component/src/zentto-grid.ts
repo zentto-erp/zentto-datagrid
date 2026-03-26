@@ -30,6 +30,13 @@ import {
   sparklineLinePath,
   sparklineAreaPath,
   sparklineBars,
+  // v0.5 — Tree Data & Cell Merge
+  buildTreeRows,
+  computeMergeMap,
+  // v0.7
+  generateChartSvg,
+  detectNumericFields,
+  generatePrintHtml,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -48,6 +55,9 @@ import type {
   NormalizedRange,
   PasteData,
   SparklineData,
+  // v0.5
+  TreeNode,
+  MergeMap,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -303,6 +313,7 @@ export class ZenttoGrid extends LitElement {
   // --- v0.7 --- Cell Comments/Notes ------------------------------------
   @property({ type: Boolean, attribute: 'enable-comments' }) enableComments = false;
   @property({ attribute: false }) cellNotes: Record<string, string> = {};
+
 
   // ─── v0.5 — Tree Data (Hierarchical) ──────────────────────────
   @property({ type: Boolean, attribute: 'enable-tree-data' }) enableTreeData = false;
@@ -665,6 +676,7 @@ export class ZenttoGrid extends LitElement {
     });
   }
 
+
   // ─── v0.5 — Tree Data helpers ──────────────────────────────────
 
   private _toggleTreeNode(nodeId: string) {
@@ -938,6 +950,106 @@ export class ZenttoGrid extends LitElement {
   private _contextExportVisible() {
     downloadCsv(this._filteredRows, this._visibleColumns, this.exportFilename + '-visible');
     this._closeContextMenu();
+  }
+
+
+  // ─── v0.7 — Charts Panel ───────────────────────────────────────
+
+  private _toggleChartPanel() {
+    this._chartOpen = !this._chartOpen;
+    if (this._chartOpen && !this._chartLabelField) {
+      const textCol = this.columns.find(c => !c.field.startsWith('__') && c.type !== 'number' && !c.currency && c.type !== 'actions');
+      if (textCol) this._chartLabelField = textCol.field;
+      const numCols = this.columns.filter(c => c.type === 'number' || c.currency);
+      if (numCols.length > 0) this._chartValueFields = [numCols[0].field];
+    }
+  }
+
+  private _getChartSvg(): string {
+    if (!this._chartLabelField || this._chartValueFields.length === 0) return '';
+    return generateChartSvg(this._filteredRows, {
+      type: this._chartType,
+      labelField: this._chartLabelField,
+      valueFields: this._chartValueFields,
+    });
+  }
+
+  private _toggleChartValueField(field: string) {
+    if (this._chartValueFields.includes(field)) {
+      this._chartValueFields = this._chartValueFields.filter(f => f !== field);
+    } else {
+      this._chartValueFields = [...this._chartValueFields, field];
+    }
+  }
+
+  // ─── v0.7 — Print ──────────────────────────────────────────────
+
+  private _handlePrint() {
+    const visibleCols = this._visibleColumns;
+    const orientation = visibleCols.length > 5 ? 'landscape' : 'portrait';
+    const htmlStr = generatePrintHtml(this._filteredRows, visibleCols, {
+      title: this.printTitle || this.exportFilename || 'Zentto Grid',
+      orientation,
+      showTotals: this.showTotals,
+      headerRepeat: true,
+    });
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(htmlStr); win.document.close(); }
+  }
+
+  // ─── v0.7 — Cell Notes/Comments ────────────────────────────────
+
+  private _getNoteKey(rowKey: string, field: string): string {
+    return `${rowKey}_${field}`;
+  }
+
+  private _hasNote(row: GridRow, field: string): boolean {
+    return !!this.cellNotes[this._getNoteKey(this._getRowKey(row), field)];
+  }
+
+  private _getNote(row: GridRow, field: string): string {
+    return this.cellNotes[this._getNoteKey(this._getRowKey(row), field)] ?? '';
+  }
+
+  private _openNoteMenu(e: MouseEvent, row: GridRow, field: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    const container = this.shadowRoot?.querySelector('.zg-container');
+    const rect = container?.getBoundingClientRect();
+    const x = rect ? e.clientX - rect.left : e.offsetX;
+    const y = rect ? e.clientY - rect.top : e.offsetY;
+    this._noteMenu = { x, y, rowKey: this._getRowKey(row), field };
+  }
+
+  private _closeNoteMenu() { this._noteMenu = null; }
+
+  private _startNoteEdit(action: 'add' | 'edit') {
+    if (!this._noteMenu) return;
+    const { rowKey, field } = this._noteMenu;
+    const existing = this.cellNotes[this._getNoteKey(rowKey, field)] ?? '';
+    this._noteEditing = { rowKey, field, text: action === 'add' ? '' : existing };
+    this._closeNoteMenu();
+  }
+
+  private _saveNote() {
+    if (!this._noteEditing) return;
+    const { rowKey, field, text } = this._noteEditing;
+    const key = this._getNoteKey(rowKey, field);
+    const action = this.cellNotes[key] ? 'edit' : 'add';
+    this.cellNotes = { ...this.cellNotes, [key]: text };
+    this._dispatchGridEvent('note-change', { rowKey, field, note: text, action } as NoteChangeDetail);
+    this._noteEditing = null;
+  }
+
+  private _deleteNote() {
+    if (!this._noteMenu) return;
+    const { rowKey, field } = this._noteMenu;
+    const key = this._getNoteKey(rowKey, field);
+    const newNotes = { ...this.cellNotes };
+    delete newNotes[key];
+    this.cellNotes = newNotes;
+    this._dispatchGridEvent('note-change', { rowKey, field, note: '', action: 'delete' } as NoteChangeDetail);
+    this._closeNoteMenu();
   }
 
   // ─── Row Selection ─────────────────────────────────────────────
@@ -2500,6 +2612,9 @@ export class ZenttoGrid extends LitElement {
       + (hasActions ? 1 : 0);
     const actionsWidth = hasActions ? Math.max(80, this.actionButtons.length * 40 + 16) : 0;
     const selCount = this._selectedRows.size;
+    const mergeMap = this._mergeMap;
+    const pinnedTop = this.pinnedRows?.top || [];
+    const pinnedBottom = this.pinnedRows?.bottom || [];
 
     return html`
       <div class="zg-container ${this._densityClass} zg-theme-${this.theme}" style="height:${this.height}" tabindex="0"
@@ -2542,6 +2657,41 @@ export class ZenttoGrid extends LitElement {
                 : this._t('Sin resultados', 'No results')}
             </span>
             <button class="zg-btn zg-btn-sm" @click=${() => { this._findOpen = false; this._findQuery = ''; this._findMatches = []; }}>\u2715</button>
+          </div>
+        ` : nothing}
+
+        <!-- Chart Panel (v0.7) -->
+        ${this.enableCharts && this._chartOpen ? html`
+          <div class="zg-chart-panel">
+            <div class="zg-chart-toolbar">
+              <div class="zg-chart-controls">
+                <select class="zg-chart-select" @change=${(e: Event) => { this._chartType = (e.target as HTMLSelectElement).value as any; }}>
+                  <option value="bar" ?selected=${this._chartType === 'bar'}>${this._t('Barras', 'Bar')}</option>
+                  <option value="line" ?selected=${this._chartType === 'line'}>${this._t('Linea', 'Line')}</option>
+                  <option value="area" ?selected=${this._chartType === 'area'}>${this._t('Area', 'Area')}</option>
+                  <option value="pie" ?selected=${this._chartType === 'pie'}>${this._t('Pastel', 'Pie')}</option>
+                  <option value="donut" ?selected=${this._chartType === 'donut'}>${this._t('Dona', 'Donut')}</option>
+                </select>
+                <select class="zg-chart-select" @change=${(e: Event) => { this._chartLabelField = (e.target as HTMLSelectElement).value; }}>
+                  <option value="">${this._t('Etiqueta...', 'Label...')}</option>
+                  ${this.columns.filter(c => !c.field.startsWith('__') && c.type !== 'actions').map(c => html`
+                    <option value="${c.field}" ?selected=${this._chartLabelField === c.field}>${c.header || c.field}</option>
+                  `)}
+                </select>
+                <span class="zg-chart-values-label">${this._t('Valores:', 'Values:')}</span>
+                ${this.columns.filter(c => c.type === 'number' || c.currency).map(c => html`
+                  <label class="zg-chart-value-toggle">
+                    <input type="checkbox" .checked=${this._chartValueFields.includes(c.field)}
+                      @change=${() => this._toggleChartValueField(c.field)} />
+                    <span>${c.header || c.field}</span>
+                  </label>
+                `)}
+              </div>
+              <button class="zg-btn-icon" @click=${() => { this._chartOpen = false; }} title="${this._t('Cerrar', 'Close')}">${this._iconHtml('close')}</button>
+            </div>
+            <div class="zg-chart-body">
+              ${unsafeHTML(this._getChartSvg())}
+            </div>
           </div>
         ` : nothing}
 
@@ -2607,14 +2757,14 @@ export class ZenttoGrid extends LitElement {
                 ${this.enableDragDrop ? html`<th class="zg-th zg-drag-handle" style="width:24px"></th>` : nothing}
                 ${this.enableMasterDetail ? html`<th class="zg-th zg-th-expand" style="width:32px"></th>` : nothing}
                 <th class="zg-th zg-th-row-num" style="width:40px" role="columnheader" aria-label="#">#</th>
-                ${visibleCols.map((col) => {
+                ${visibleCols.map((col, cIdx) => {
                   const w = this._columnWidths[col.field] || col.width;
                   const pinStyle = this._getPinHeaderStyle(col.field, visibleCols);
                   const pinClass = this._isPinned(col.field) ? 'zg-th-pinned' : '';
                   return html`
                   <th
                     class="zg-th ${col.sortable ? 'zg-th-sortable' : ''} ${col.type === 'number' || col.currency ? 'zg-th-right' : ''} ${pinClass}"
-                    style="${w ? `width:${w}px;` : col.flex ? `flex:${col.flex};` : ''}${pinStyle}"
+                    style="${w ? `width:${w}px;` : col.flex ? `flex:${col.flex};` : ''}${pinStyle}${this.freezeCols > 0 && cIdx < this.freezeCols ? `position:sticky;left:${cIdx * 120}px;z-index:5;background:var(--zg-header-bg);` : ''}"
                     role="columnheader"
                     aria-sort="${this._sorts.find(s => s.field === col.field)?.direction === 'asc' ? 'ascending' : this._sorts.find(s => s.field === col.field)?.direction === 'desc' ? 'descending' : 'none'}"
                     aria-label="${col.header || col.field}"
@@ -2657,6 +2807,23 @@ export class ZenttoGrid extends LitElement {
                 </tr>
               ` : nothing}
             </thead>
+            ${pinnedTop.length > 0 ? html`
+              <tbody class="zg-pinned-top" role="rowgroup">
+                ${pinnedTop.map((row, _pIdx) => html`
+                  <tr class="zg-row zg-row-pinned-top">
+                    ${this.enableRowSelection ? html`<td class="zg-td zg-td-checkbox"></td>` : nothing}
+                    ${this.enableDragDrop ? html`<td class="zg-td"></td>` : nothing}
+                    ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
+                    <td class="zg-td zg-td-row-num"></td>
+                    ${visibleCols.map((col) => {
+                      const val = row[col.field];
+                      return html`<td class="zg-td zg-td-pinned-top ${col.type === 'number' || col.currency ? 'zg-td-right' : ''}">${this._renderCellContent(val, col, row)}</td>`;
+                    })}
+                    ${hasActions ? html`<td class="zg-td"></td>` : nothing}
+                  </tr>
+                `)}
+              </tbody>
+            ` : nothing}
             <tbody role="rowgroup">
               ${displayRows.map((row, idx) => {
                 const isTotals = row['__zentto_totals__'];
@@ -2721,8 +2888,13 @@ export class ZenttoGrid extends LitElement {
                       </td>
                     ` : nothing}
                     <td class="zg-td zg-td-row-num">${isTotals ? '' : this._page * this._pageSize + idx + 1}</td>
-                    ${visibleCols.map((col) => {
+                    ${visibleCols.map((col, cIdx) => {
                       const val = row[col.field];
+                      // v0.5 — Cell Merge: skip hidden merged cells
+                      const cellMerge = mergeMap[idx]?.[col.field];
+                      if (cellMerge?.hidden) return nothing;
+                      const mergeRowspan = cellMerge?.rowspan || 1;
+
                       const isMatch = this._findMatches.some((m) => m.rowIndex === idx && m.field === col.field);
                       const isCurrent = this._findMatches[this._findIdx]?.rowIndex === idx && this._findMatches[this._findIdx]?.field === col.field;
                       const pinStyle = this._getPinStyle(col.field, visibleCols);
@@ -2732,17 +2904,36 @@ export class ZenttoGrid extends LitElement {
                       const colIdx = visibleCols.indexOf(col);
                       const isActive = this._activeCell?.rowIdx === idx && this._activeCell?.colIdx === colIdx;
                       const inRange = this.enableRangeSelection && this._isCellInRange(idx, colIdx);
+
+                      // v0.5 — Frozen columns: apply sticky positioning
+                      const freezeStyle = this.freezeCols > 0 && cIdx < this.freezeCols
+                        ? `position:sticky;left:${cIdx * 120}px;z-index:2;background:var(--zg-row-bg, var(--zg-bg));`
+                        : '';
+
+                      // v0.5 — Tree indent for first data column
+                      const isFirstCol = cIdx === 0;
+                      const treeLevel = (row as any)['__zentto_tree_level__'] as number | undefined;
+                      const isTreeRow = this.enableTreeData && treeLevel != null;
+                      const treeIndentPx = isTreeRow && isFirstCol ? treeLevel * this.treeIndent : 0;
+
                       return html`
-                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''}"
-                            style="${pinStyle}"
+                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''} ${this.freezeCols > 0 && cIdx < this.freezeCols ? 'zg-frozen-col' : ''}"
+                            style="${pinStyle}${freezeStyle}"
                             role="gridcell"
+                            rowspan="${mergeRowspan > 1 ? mergeRowspan : nothing}"
                             aria-colindex="${colIdx + 1}"
                             aria-selected="${isActive || inRange ? 'true' : 'false'}"
-                            @contextmenu=${(e: MouseEvent) => this._handleContextMenu(e, row, col.field, val)}
+                            @contextmenu=${(e: MouseEvent) => { this._handleContextMenu(e, row, col.field, val); if (this.enableComments) this._openNoteMenu(e, row, col.field); }}
                             @click=${() => this._handleCellClick(row, col.field, idx)}
                             @mousedown=${(e: MouseEvent) => this._handleRangeMouseDown(idx, colIdx, e)}
                             @mouseover=${() => this._handleRangeMouseOver(idx, colIdx)}
                             @dblclick=${editable ? () => this._startEdit(row, col.field) : nothing}>
+                          ${isTreeRow && isFirstCol ? html`
+                            <span class="zg-tree-indent" style="display:inline-flex;align-items:center;padding-left:${treeIndentPx}px;gap:4px">
+                              <span class="zg-tree-chevron" @click=${(e: Event) => { e.stopPropagation(); this._toggleTreeNode(String(row[this.treeIdField])); }}>${unsafeHTML(this._treeChevron(row))}</span>
+                              <span class="zg-tree-icon">${unsafeHTML(this._treeIcon(row))}</span>
+                            </span>
+                          ` : nothing}
                           ${isEditing ? (col.type === 'date' || col.type === 'datetime')
                             ? this._renderDateEditor(row, col)
                             : html`
@@ -2754,6 +2945,9 @@ export class ZenttoGrid extends LitElement {
                               @blur=${() => this._commitEdit(row)}
                               autofocus />
                           ` : this._renderCellContent(val, col, row)}
+                          ${this.enableComments && this._hasNote(row, col.field) ? html`
+                            <span class="zg-note-indicator" title="${this._getNote(row, col.field)}"></span>
+                          ` : nothing}
                         </td>
                       `;
                     })}
@@ -2794,6 +2988,23 @@ export class ZenttoGrid extends LitElement {
                 `;
               })}
             </tbody>
+            ${pinnedBottom.length > 0 ? html`
+              <tbody class="zg-pinned-bottom" role="rowgroup">
+                ${pinnedBottom.map((row, _pIdx) => html`
+                  <tr class="zg-row zg-row-pinned-bottom">
+                    ${this.enableRowSelection ? html`<td class="zg-td zg-td-checkbox"></td>` : nothing}
+                    ${this.enableDragDrop ? html`<td class="zg-td"></td>` : nothing}
+                    ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
+                    <td class="zg-td zg-td-row-num"></td>
+                    ${visibleCols.map((col) => {
+                      const val = row[col.field];
+                      return html`<td class="zg-td zg-td-pinned-bottom ${col.type === 'number' || col.currency ? 'zg-td-right' : ''}">${this._renderCellContent(val, col, row)}</td>`;
+                    })}
+                    ${hasActions ? html`<td class="zg-td"></td>` : nothing}
+                  </tr>
+                `)}
+              </tbody>
+            ` : nothing}
           </table>
         </div>` : nothing}
 
@@ -2824,6 +3035,44 @@ export class ZenttoGrid extends LitElement {
             </div>
             <div class="zg-context-item" @click=${this._contextExportVisible}>
               <span class="zg-header-menu-icon">${this._iconHtml('export')}</span> ${this._t('Exportar datos visibles', 'Export visible data')}
+            </div>
+          </div>
+        ` : nothing}
+
+        <!-- Note context menu (v0.7) -->
+        ${this.enableComments && this._noteMenu ? html`
+          <div class="zg-context-menu" style="left:${this._noteMenu.x}px;top:${this._noteMenu.y}px" @click=${(e: Event) => e.stopPropagation()}>
+            ${!this.cellNotes[this._getNoteKey(this._noteMenu.rowKey, this._noteMenu.field)] ? html`
+              <div class="zg-context-item" @click=${() => this._startNoteEdit('add')}>
+                <span class="zg-header-menu-icon">${this._iconHtml('note')}</span> ${this._t('Agregar nota', 'Add note')}
+              </div>
+            ` : html`
+              <div class="zg-context-item" @click=${() => this._startNoteEdit('edit')}>
+                <span class="zg-header-menu-icon">${this._iconHtml('edit')}</span> ${this._t('Editar nota', 'Edit note')}
+              </div>
+              <div class="zg-context-item" @click=${() => this._deleteNote()} style="color:var(--zg-error)">
+                <span class="zg-header-menu-icon">${this._iconHtml('delete')}</span> ${this._t('Eliminar nota', 'Delete note')}
+              </div>
+            `}
+          </div>
+        ` : nothing}
+
+        <!-- Note editor modal (v0.7) -->
+        ${this._noteEditing ? html`
+          <div class="zg-note-overlay" @click=${() => { this._noteEditing = null; }}></div>
+          <div class="zg-note-editor">
+            <div class="zg-note-editor-header">
+              <span>${this._t('Nota', 'Note')}</span>
+              <button class="zg-btn-icon" @click=${() => { this._noteEditing = null; }}>${this._iconHtml('close')}</button>
+            </div>
+            <textarea class="zg-note-textarea"
+              .value=${this._noteEditing.text}
+              @input=${(e: InputEvent) => { this._noteEditing = { ...this._noteEditing!, text: (e.target as HTMLTextAreaElement).value }; }}
+              placeholder="${this._t('Escribe una nota...', 'Write a note...')}"
+              autofocus></textarea>
+            <div class="zg-note-editor-footer">
+              <button class="zg-btn" @click=${() => { this._noteEditing = null; }}>${this._t('Cancelar', 'Cancel')}</button>
+              <button class="zg-btn-primary" @click=${() => this._saveNote()}>${this._t('Guardar', 'Save')}</button>
             </div>
           </div>
         ` : nothing}
@@ -3514,6 +3763,19 @@ onMounted(() => {
           ` : nothing}
           <span class="zg-toolbar-sep"></span>
 
+          <!-- Charts (v0.7) -->
+          ${this.enableCharts ? html`
+            <button class="zg-btn-icon ${this._chartOpen ? 'zg-btn-icon--active' : ''}"
+                    @click=${() => this._toggleChartPanel()}
+                    title="${this._t('Graficos', 'Charts')}">${this._iconHtml('chart')}</button>
+          ` : nothing}
+
+          <!-- Print (v0.7) -->
+          ${this.enablePrint ? html`
+            <button class="zg-btn-icon" @click=${() => this._handlePrint()}
+                    title="${this._t('Imprimir', 'Print')}">${this._iconHtml('print')}</button>
+          ` : nothing}
+
           <!-- Clipboard -->
           ${this.enableClipboard ? html`
             <button class="zg-btn-icon" @click=${this._copyAll} title="${this._t('Copiar todo', 'Copy all')}">${this._iconHtml('clipboard')}</button>
@@ -3727,7 +3989,7 @@ onMounted(() => {
   private _renderColumnGroupHeaders(visibleCols: ColumnDef[]) {
     if (!this.columnGroups.length) return nothing;
 
-    const headers: { label: string; colspan: number; isGroup: boolean }[] = [];
+    const headers: { label: string; colspan: number; isGroup: boolean; groupId?: string; collapsible?: boolean; collapsed?: boolean }[] = [];
     let i = 0;
     while (i < visibleCols.length) {
       const col = visibleCols[i];
@@ -3738,7 +4000,14 @@ onMounted(() => {
           if (group.children.includes(visibleCols[j].field)) span++;
           else break;
         }
-        headers.push({ label: group.header, colspan: span, isGroup: true });
+        headers.push({
+          label: group.header,
+          colspan: span,
+          isGroup: true,
+          groupId: group.groupId,
+          collapsible: group.collapsible,
+          collapsed: this._collapsedGroups.has(group.groupId),
+        });
         i += span;
       } else {
         headers.push({ label: '', colspan: 1, isGroup: false });
@@ -3747,7 +4016,13 @@ onMounted(() => {
     }
 
     return headers.map(h => html`
-      <th class="zg-th zg-th-group ${h.isGroup ? '' : 'zg-th-group-empty'}" colspan="${h.colspan}">
+      <th class="zg-th zg-th-group ${h.isGroup ? '' : 'zg-th-group-empty'} ${h.collapsed ? 'zg-th-group--collapsed' : ''}" colspan="${h.colspan}">
+        ${h.collapsible ? html`
+          <span class="zg-group-collapse-toggle" @click=${() => this._toggleColumnGroup(h.groupId!)}
+                title="${h.collapsed ? this._t('Expandir grupo', 'Expand group') : this._t('Colapsar grupo', 'Collapse group')}">
+            ${h.collapsed ? html`${unsafeHTML(this._icon('chevronRight'))}` : html`${unsafeHTML(this._icon('chevronLeft'))}`}
+          </span>
+        ` : nothing}
         ${h.label}
       </th>
     `);
