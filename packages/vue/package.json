@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid-vue",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Vue 3 wrapper for <zentto-grid> web component.",
   "type": "module",
   "main": "dist/index.js",
