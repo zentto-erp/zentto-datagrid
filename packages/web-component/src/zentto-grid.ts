@@ -44,6 +44,8 @@ import {
   generateQrSvg,
   generateBarcodeSvg,
   generateTimelineSvg,
+  // v0.4 — Conditional Formatting
+  evaluateConditionalFormat,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -2550,6 +2552,15 @@ export class ZenttoGrid extends LitElement {
       return html`<a class="zg-link" href="${href}" target="${target}" @click=${(e: Event) => e.stopPropagation()}>${this._formatValue(val, col)}</a>`;
     }
 
+    // v0.4 — Conditional Formatting
+    if (col.conditionalFormat && col.conditionalFormat.length > 0 && !isTotals) {
+      const cfStyle = evaluateConditionalFormat(val, col.conditionalFormat);
+      if (cfStyle) {
+        const styleStr = Object.entries(cfStyle).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`).join(';');
+        return html`<span style="${styleStr}">${this._formatValue(val, col, isTotals)}</span>`;
+      }
+    }
+
         return html`${this._formatValue(val, col, isTotals)}`;
   }
 
@@ -3117,7 +3128,19 @@ export class ZenttoGrid extends LitElement {
                           ` : nothing}
                           ${isEditing ? (col.type === 'date' || col.type === 'datetime')
                             ? this._renderDateEditor(row, col)
-                            : html`
+                            : col.dropdown
+                            ? html`
+                            <select class="zg-edit-select"
+                              .value=${this._editValue}
+                              @change=${(e: Event) => { this._editValue = (e.target as HTMLSelectElement).value; this._commitEdit(row); }}
+                              @keydown=${(e: KeyboardEvent) => { if (e.key === 'Escape') this._editingCell = null; }}>
+                              ${(Array.isArray(col.dropdown) ? col.dropdown : []).map((opt: any) => {
+                                const v = typeof opt === 'string' ? opt : opt.value;
+                                const l = typeof opt === 'string' ? opt : opt.label;
+                                return html`<option value="${v}" ?selected=${this._editValue === v}>${l}</option>`;
+                              })}
+                            </select>
+                          ` : html`
                             <input type="${col.type === 'number' ? 'number' : 'text'}"
                               class="zg-edit-input"
                               .value=${this._editValue}
