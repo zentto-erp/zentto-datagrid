@@ -57,6 +57,10 @@ export type { CellAddress, SelectionRange, NormalizedRange } from './selection/r
 export { parseClipboardData, applyPasteData } from './selection/paste';
 export type { PasteData } from './selection/paste';
 
+// Batch Edit
+export { applyBatchEdit } from './data/batch-edit';
+export type { BatchChange } from './data/batch-edit';
+
 // Formulas
 export { evaluateFormula, applyFormulas } from './data/formula';
 
@@ -75,3 +79,11 @@ export type { SparklineType, SparklineConfig, SparklineData } from './data/spark
 // Layout persistence
 export { saveLayout, loadLayout, clearLayout } from './layout/persistence';
 export type { GridLayout } from './layout/persistence';
+
+// v0.5.0 — Tree Data
+export { buildTreeRows, getDescendantIds } from './data/tree';
+export type { TreeNode } from './data/tree';
+
+// v0.5.0 — Cell Merge
+export { computeMergeMap } from './data/merge';
+export type { CellMergeInfo, MergeMap } from './data/merge';

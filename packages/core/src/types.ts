@@ -128,6 +128,10 @@ export interface ColumnDef {
   sparklineField?: string;
   /** Sparkline color override */
   sparklineColor?: string;
+
+  // ─── v0.5.0 — Cell Merge ──────────────────────────────────
+  /** Auto-merge consecutive cells with the same value in this column */
+  merge?: boolean;
 }
 
 /** Column group (multi-level headers) */
@@ -135,6 +139,8 @@ export interface ColumnGroup {
   groupId: string;
   header: string;
   children: string[];
+  /** Allow collapsing this group to show only the first column */
+  collapsible?: boolean;
 }
 
 /** Pivot configuration */
@@ -191,6 +197,18 @@ export interface GridEvents {
   'redo': { action: unknown };
   'paste': { changes: unknown[]; rows: number; cols: number };
   'range-select': { startRow: number; endRow: number; startCol: number; endCol: number };
+  'search-change': { query: string };
+  'group-change': { groupFields: string[]; activeField: string };
+  'batch-edit': { changes: { rowKey: string; field: string; oldValue: unknown; newValue: unknown }[] };
+  'load-more': { page: number };
+  'server-request': {
+    page: number;
+    pageSize: number;
+    sorts: SortEntry[];
+    filters: FilterRule[];
+    search: string;
+    groupField: string;
+  };
 }
 
 /** Filter panel field definition — declared from React, rendered inside the grid toolbar */

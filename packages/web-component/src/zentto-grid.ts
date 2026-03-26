@@ -30,6 +30,9 @@ import {
   sparklineLinePath,
   sparklineAreaPath,
   sparklineBars,
+  // v0.5 — Tree Data & Cell Merge
+  buildTreeRows,
+  computeMergeMap,
 } from '@zentto/datagrid-core';
 import type {
   ColumnDef,
@@ -48,6 +51,9 @@ import type {
   NormalizedRange,
   PasteData,
   SparklineData,
+  // v0.5
+  TreeNode,
+  MergeMap,
 } from '@zentto/datagrid-core';
 import { gridStyles } from './styles/grid-styles';
 
@@ -287,6 +293,19 @@ export class ZenttoGrid extends LitElement {
   // ─── v0.2 — Clipboard Paste ─────────────────────────────────
   @property({ type: Boolean, attribute: 'enable-paste' }) enablePaste = false;
 
+  // ─── v0.5 — Tree Data (Hierarchical) ──────────────────────────
+  @property({ type: Boolean, attribute: 'enable-tree-data' }) enableTreeData = false;
+  @property({ type: String, attribute: 'tree-id-field' }) treeIdField = 'id';
+  @property({ type: String, attribute: 'tree-parent-field' }) treeParentField = 'parentId';
+  @property({ type: Number, attribute: 'tree-indent' }) treeIndent = 20;
+
+  // ─── v0.5 — Row Pinning (Top/Bottom) ─────────────────────────
+  @property({ attribute: false }) pinnedRows: { top?: GridRow[]; bottom?: GridRow[] } = {};
+
+  // ─── v0.5 — Frozen/Split Panes ───────────────────────────────
+  @property({ type: Number, attribute: 'freeze-rows' }) freezeRows = 0;
+  @property({ type: Number, attribute: 'freeze-cols' }) freezeCols = 0;
+
   // ─── Internal state ───────────────────────────────────────────
 
   @state() private _sorts: SortEntry[] = [];
@@ -298,6 +317,12 @@ export class ZenttoGrid extends LitElement {
   @state() private _findQuery = '';
   @state() private _findMatches: FindMatch[] = [];
   @state() private _findIdx = 0;
+
+  // v0.5 — Tree Data state
+  @state() private _treeExpanded: Set<string> = new Set();
+
+  // v0.5 — Collapsible Column Groups state
+  @state() private _collapsedGroups: Set<string> = new Set();
 
   // Master-Detail state
   @state() private _expandedRows: Set<string> = new Set();
@@ -486,11 +511,23 @@ export class ZenttoGrid extends LitElement {
     } else {
       source = this._paginatedResult.rows;
     }
+    // v0.5 — Tree Data: convert flat rows to hierarchical visible rows
+    if (this.enableTreeData) {
+      source = buildTreeRows(source, this.treeIdField, this.treeParentField, this._treeExpanded);
+    }
+
     if (this.showTotals && !(this.enableGrouping && this.groupField) && !this.enableVirtualScroll) {
       const totals = computeTotals(this._sortedRows, this.columns, this.totalsLabel);
       return [...source, totals];
     }
     return source;
+  }
+
+  // v0.5 — Merge map (computed from display rows)
+  private get _mergeMap(): MergeMap {
+    const mergeCols = this.columns.filter(c => c.merge);
+    if (mergeCols.length === 0) return {};
+    return computeMergeMap(this._displayRows, this.columns);
   }
 
   // ─── Active filter count ────────────────────────────────────────
@@ -517,6 +554,15 @@ export class ZenttoGrid extends LitElement {
       if (c.field.startsWith('__')) return false;
       if (this._hiddenColumns.has(c.field)) return false;
       if (isMobile && c.mobileHide) return false;
+
+      // v0.5 — Collapsible column groups: hide children (except first) when collapsed
+      if (c.columnGroupId) {
+        const group = this.columnGroups.find(g => g.groupId === c.columnGroupId);
+        if (group?.collapsible && this._collapsedGroups.has(group.groupId)) {
+          if (group.children[0] !== c.field) return false;
+        }
+      }
+
       return true;
     });
   }
@@ -539,6 +585,50 @@ export class ZenttoGrid extends LitElement {
 
   private _dispatchGridEvent(name: string, detail: unknown) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+
+  // ─── v0.5 — Tree Data helpers ──────────────────────────────────
+
+  private _toggleTreeNode(nodeId: string) {
+    const next = new Set(this._treeExpanded);
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else {
+      next.add(nodeId);
+    }
+    this._treeExpanded = next;
+    this._dispatchGridEvent('tree-toggle', { nodeId, expanded: next.has(nodeId) });
+  }
+
+  private _treeIcon(row: GridRow): string {
+    const hasChildren = row['__zentto_tree_has_children__'];
+    const isExpanded = row['__zentto_tree_expanded__'];
+    if (!hasChildren) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
+    if (isExpanded) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></svg>`;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg>`;
+  }
+
+  private _treeChevron(row: GridRow): string {
+    const hasChildren = row['__zentto_tree_has_children__'];
+    if (!hasChildren) return '<span style="display:inline-block;width:16px"></span>';
+    const isExpanded = row['__zentto_tree_expanded__'];
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.15s;transform:rotate(${isExpanded ? '90' : '0'}deg);cursor:pointer"><polyline points="9 18 15 12 9 6"/></svg>`;
+  }
+
+  // ─── v0.5 — Collapsible Column Groups ─────────────────────────
+
+  private _toggleColumnGroup(groupId: string) {
+    const next = new Set(this._collapsedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    this._collapsedGroups = next;
   }
 
   // ─── Sort handler ─────────────────────────────────────────────
@@ -2235,6 +2325,9 @@ export class ZenttoGrid extends LitElement {
       + (hasActions ? 1 : 0);
     const actionsWidth = hasActions ? Math.max(80, this.actionButtons.length * 40 + 16) : 0;
     const selCount = this._selectedRows.size;
+    const mergeMap = this._mergeMap;
+    const pinnedTop = this.pinnedRows?.top || [];
+    const pinnedBottom = this.pinnedRows?.bottom || [];
 
     return html`
       <div class="zg-container ${this._densityClass} zg-theme-${this.theme}" style="height:${this.height}" tabindex="0"
@@ -2341,14 +2434,14 @@ export class ZenttoGrid extends LitElement {
                 ${this.enableDragDrop ? html`<th class="zg-th zg-drag-handle" style="width:24px"></th>` : nothing}
                 ${this.enableMasterDetail ? html`<th class="zg-th zg-th-expand" style="width:32px"></th>` : nothing}
                 <th class="zg-th zg-th-row-num" style="width:40px" role="columnheader" aria-label="#">#</th>
-                ${visibleCols.map((col) => {
+                ${visibleCols.map((col, cIdx) => {
                   const w = this._columnWidths[col.field] || col.width;
                   const pinStyle = this._getPinHeaderStyle(col.field, visibleCols);
                   const pinClass = this._isPinned(col.field) ? 'zg-th-pinned' : '';
                   return html`
                   <th
                     class="zg-th ${col.sortable ? 'zg-th-sortable' : ''} ${col.type === 'number' || col.currency ? 'zg-th-right' : ''} ${pinClass}"
-                    style="${w ? `width:${w}px;` : col.flex ? `flex:${col.flex};` : ''}${pinStyle}"
+                    style="${w ? `width:${w}px;` : col.flex ? `flex:${col.flex};` : ''}${pinStyle}${this.freezeCols > 0 && cIdx < this.freezeCols ? `position:sticky;left:${cIdx * 120}px;z-index:5;background:var(--zg-header-bg);` : ''}"
                     role="columnheader"
                     aria-sort="${this._sorts.find(s => s.field === col.field)?.direction === 'asc' ? 'ascending' : this._sorts.find(s => s.field === col.field)?.direction === 'desc' ? 'descending' : 'none'}"
                     aria-label="${col.header || col.field}"
@@ -2390,6 +2483,23 @@ export class ZenttoGrid extends LitElement {
                 </tr>
               ` : nothing}
             </thead>
+            ${pinnedTop.length > 0 ? html`
+              <tbody class="zg-pinned-top" role="rowgroup">
+                ${pinnedTop.map((row, _pIdx) => html`
+                  <tr class="zg-row zg-row-pinned-top">
+                    ${this.enableRowSelection ? html`<td class="zg-td zg-td-checkbox"></td>` : nothing}
+                    ${this.enableDragDrop ? html`<td class="zg-td"></td>` : nothing}
+                    ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
+                    <td class="zg-td zg-td-row-num"></td>
+                    ${visibleCols.map((col) => {
+                      const val = row[col.field];
+                      return html`<td class="zg-td zg-td-pinned-top ${col.type === 'number' || col.currency ? 'zg-td-right' : ''}">${this._renderCellContent(val, col, row)}</td>`;
+                    })}
+                    ${hasActions ? html`<td class="zg-td"></td>` : nothing}
+                  </tr>
+                `)}
+              </tbody>
+            ` : nothing}
             <tbody role="rowgroup">
               ${displayRows.map((row, idx) => {
                 const isTotals = row['__zentto_totals__'];
@@ -2452,8 +2562,13 @@ export class ZenttoGrid extends LitElement {
                       </td>
                     ` : nothing}
                     <td class="zg-td zg-td-row-num">${isTotals ? '' : this._page * this._pageSize + idx + 1}</td>
-                    ${visibleCols.map((col) => {
+                    ${visibleCols.map((col, cIdx) => {
                       const val = row[col.field];
+                      // v0.5 — Cell Merge: skip hidden merged cells
+                      const cellMerge = mergeMap[idx]?.[col.field];
+                      if (cellMerge?.hidden) return nothing;
+                      const mergeRowspan = cellMerge?.rowspan || 1;
+
                       const isMatch = this._findMatches.some((m) => m.rowIndex === idx && m.field === col.field);
                       const isCurrent = this._findMatches[this._findIdx]?.rowIndex === idx && this._findMatches[this._findIdx]?.field === col.field;
                       const pinStyle = this._getPinStyle(col.field, visibleCols);
@@ -2463,10 +2578,23 @@ export class ZenttoGrid extends LitElement {
                       const colIdx = visibleCols.indexOf(col);
                       const isActive = this._activeCell?.rowIdx === idx && this._activeCell?.colIdx === colIdx;
                       const inRange = this.enableRangeSelection && this._isCellInRange(idx, colIdx);
+
+                      // v0.5 — Frozen columns: apply sticky positioning
+                      const freezeStyle = this.freezeCols > 0 && cIdx < this.freezeCols
+                        ? `position:sticky;left:${cIdx * 120}px;z-index:2;background:var(--zg-row-bg, var(--zg-bg));`
+                        : '';
+
+                      // v0.5 — Tree indent for first data column
+                      const isFirstCol = cIdx === 0;
+                      const treeLevel = (row as any)['__zentto_tree_level__'] as number | undefined;
+                      const isTreeRow = this.enableTreeData && treeLevel != null;
+                      const treeIndentPx = isTreeRow && isFirstCol ? treeLevel * this.treeIndent : 0;
+
                       return html`
-                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''}"
-                            style="${pinStyle}"
+                        <td class="zg-td ${col.type === 'number' || col.currency ? 'zg-td-right' : ''} ${isTotals ? 'zg-td-totals' : ''} ${isMatch ? 'zg-find-match' : ''} ${isCurrent ? 'zg-find-current' : ''} ${pinClass} ${editable ? 'zg-td--editable' : ''} ${isActive ? 'zg-td--active' : ''} ${inRange ? 'zg-td--in-range' : ''} ${this.freezeCols > 0 && cIdx < this.freezeCols ? 'zg-frozen-col' : ''}"
+                            style="${pinStyle}${freezeStyle}"
                             role="gridcell"
+                            rowspan="${mergeRowspan > 1 ? mergeRowspan : nothing}"
                             aria-colindex="${colIdx + 1}"
                             aria-selected="${isActive || inRange ? 'true' : 'false'}"
                             @contextmenu=${(e: MouseEvent) => this._handleContextMenu(e, row, col.field, val)}
@@ -2474,6 +2602,12 @@ export class ZenttoGrid extends LitElement {
                             @mousedown=${(e: MouseEvent) => this._handleRangeMouseDown(idx, colIdx, e)}
                             @mouseover=${() => this._handleRangeMouseOver(idx, colIdx)}
                             @dblclick=${editable ? () => this._startEdit(row, col.field) : nothing}>
+                          ${isTreeRow && isFirstCol ? html`
+                            <span class="zg-tree-indent" style="display:inline-flex;align-items:center;padding-left:${treeIndentPx}px;gap:4px">
+                              <span class="zg-tree-chevron" @click=${(e: Event) => { e.stopPropagation(); this._toggleTreeNode(String(row[this.treeIdField])); }}>${unsafeHTML(this._treeChevron(row))}</span>
+                              <span class="zg-tree-icon">${unsafeHTML(this._treeIcon(row))}</span>
+                            </span>
+                          ` : nothing}
                           ${isEditing ? (col.type === 'date' || col.type === 'datetime')
                             ? this._renderDateEditor(row, col)
                             : html`
@@ -2525,6 +2659,23 @@ export class ZenttoGrid extends LitElement {
                 `;
               })}
             </tbody>
+            ${pinnedBottom.length > 0 ? html`
+              <tbody class="zg-pinned-bottom" role="rowgroup">
+                ${pinnedBottom.map((row, _pIdx) => html`
+                  <tr class="zg-row zg-row-pinned-bottom">
+                    ${this.enableRowSelection ? html`<td class="zg-td zg-td-checkbox"></td>` : nothing}
+                    ${this.enableDragDrop ? html`<td class="zg-td"></td>` : nothing}
+                    ${this.enableMasterDetail ? html`<td class="zg-td"></td>` : nothing}
+                    <td class="zg-td zg-td-row-num"></td>
+                    ${visibleCols.map((col) => {
+                      const val = row[col.field];
+                      return html`<td class="zg-td zg-td-pinned-bottom ${col.type === 'number' || col.currency ? 'zg-td-right' : ''}">${this._renderCellContent(val, col, row)}</td>`;
+                    })}
+                    ${hasActions ? html`<td class="zg-td"></td>` : nothing}
+                  </tr>
+                `)}
+              </tbody>
+            ` : nothing}
           </table>
         </div>` : nothing}
 
@@ -3458,7 +3609,7 @@ onMounted(() => {
   private _renderColumnGroupHeaders(visibleCols: ColumnDef[]) {
     if (!this.columnGroups.length) return nothing;
 
-    const headers: { label: string; colspan: number; isGroup: boolean }[] = [];
+    const headers: { label: string; colspan: number; isGroup: boolean; groupId?: string; collapsible?: boolean; collapsed?: boolean }[] = [];
     let i = 0;
     while (i < visibleCols.length) {
       const col = visibleCols[i];
@@ -3469,7 +3620,14 @@ onMounted(() => {
           if (group.children.includes(visibleCols[j].field)) span++;
           else break;
         }
-        headers.push({ label: group.header, colspan: span, isGroup: true });
+        headers.push({
+          label: group.header,
+          colspan: span,
+          isGroup: true,
+          groupId: group.groupId,
+          collapsible: group.collapsible,
+          collapsed: this._collapsedGroups.has(group.groupId),
+        });
         i += span;
       } else {
         headers.push({ label: '', colspan: 1, isGroup: false });
@@ -3478,7 +3636,13 @@ onMounted(() => {
     }
 
     return headers.map(h => html`
-      <th class="zg-th zg-th-group ${h.isGroup ? '' : 'zg-th-group-empty'}" colspan="${h.colspan}">
+      <th class="zg-th zg-th-group ${h.isGroup ? '' : 'zg-th-group-empty'} ${h.collapsed ? 'zg-th-group--collapsed' : ''}" colspan="${h.colspan}">
+        ${h.collapsible ? html`
+          <span class="zg-group-collapse-toggle" @click=${() => this._toggleColumnGroup(h.groupId!)}
+                title="${h.collapsed ? this._t('Expandir grupo', 'Expand group') : this._t('Colapsar grupo', 'Collapse group')}">
+            ${h.collapsed ? html`${unsafeHTML(this._icon('chevronRight'))}` : html`${unsafeHTML(this._icon('chevronLeft'))}`}
+          </span>
+        ` : nothing}
         ${h.label}
       </th>
     `);
