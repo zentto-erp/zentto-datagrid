@@ -48,54 +48,73 @@ function rsEncode(data: Uint8Array, nsym: number): Uint8Array {
   return out.slice(data.length);
 }
 
-// QR Version parameters [version] = { size, dataCodewords (L), ecCodewords (L) }
-interface VersionInfo { size: number; totalDC: number; ecPerBlock: number; blocks: number; }
+// QR Version parameters [version] = { size, dataCW (byte mode capacity for L), ecCWperBlock, numBlocks }
+// Values from QR standard tables for Error Correction Level L
+interface VersionInfo { size: number; dataCW: number; ecCW: number; blocks: number; maxBytes: number; }
 const VERSIONS: VersionInfo[] = [
-  { size: 0, totalDC: 0, ecPerBlock: 0, blocks: 0 }, // v0 placeholder
-  { size: 21, totalDC: 19, ecPerBlock: 7, blocks: 1 },   // v1 — 17 bytes capacity
-  { size: 25, totalDC: 34, ecPerBlock: 10, blocks: 1 },  // v2 — 32 bytes
-  { size: 29, totalDC: 55, ecPerBlock: 15, blocks: 1 },  // v3 — 53 bytes
-  { size: 33, totalDC: 80, ecPerBlock: 20, blocks: 1 },  // v4 — 78 bytes
-  { size: 37, totalDC: 108, ecPerBlock: 18, blocks: 2 },  // v5 — 106 bytes
-  { size: 41, totalDC: 136, ecPerBlock: 20, blocks: 2 },  // v6 — 134 bytes
+  { size: 0, dataCW: 0, ecCW: 0, blocks: 0, maxBytes: 0 },
+  { size: 21, dataCW: 19, ecCW: 7, blocks: 1, maxBytes: 17 },   // v1
+  { size: 25, dataCW: 34, ecCW: 10, blocks: 1, maxBytes: 32 },  // v2
+  { size: 29, dataCW: 55, ecCW: 15, blocks: 1, maxBytes: 53 },  // v3
+  { size: 33, dataCW: 80, ecCW: 20, blocks: 1, maxBytes: 78 },  // v4
+  { size: 37, dataCW: 108, ecCW: 26, blocks: 1, maxBytes: 106 }, // v5
+  { size: 41, dataCW: 136, ecCW: 18, blocks: 2, maxBytes: 134 }, // v6
 ];
 
 function chooseVersion(dataLen: number): number {
-  // Byte mode: 4 mode bits + 8/16 length bits + data + terminator + padding
   for (let v = 1; v <= 6; v++) {
-    const capacity = VERSIONS[v].totalDC - VERSIONS[v].ecPerBlock * VERSIONS[v].blocks;
-    const overhead = v <= 9 ? 2 : 3; // mode(4bits) + length(8 or 16 bits) ≈ 2 bytes
-    if (dataLen + overhead <= capacity) return v;
+    if (dataLen <= VERSIONS[v].maxBytes) return v;
   }
-  return 6; // truncate to fit
+  return 6;
+}
+
+// Bitstream helper for encoding data
+class BitStream {
+  private bits: number[] = [];
+  put(value: number, length: number) {
+    for (let i = length - 1; i >= 0; i--) this.bits.push((value >> i) & 1);
+  }
+  getBytes(totalBytes: number): Uint8Array {
+    const result = new Uint8Array(totalBytes);
+    for (let i = 0; i < totalBytes * 8 && i < this.bits.length; i++) {
+      if (this.bits[i]) result[i >> 3] |= (0x80 >> (i & 7));
+    }
+    return result;
+  }
+  get length() { return this.bits.length; }
 }
 
 function encodeData(data: string, version: number): Uint8Array {
   const vi = VERSIONS[version];
-  const dataCW = vi.totalDC - vi.ecPerBlock * vi.blocks;
   const bytes = new TextEncoder().encode(data);
-  const len = Math.min(bytes.length, dataCW - 2);
+  const len = Math.min(bytes.length, vi.maxBytes);
+  const bs = new BitStream();
 
-  const buf = new Uint8Array(dataCW);
-  // Mode indicator: 0100 (byte) + length (8 bits for v1-9)
-  buf[0] = 0x40 | (len >> 4);
-  buf[1] = ((len & 0x0f) << 4) | (bytes[0] >> 4);
-  for (let i = 1; i < len; i++) {
-    buf[i + 1] = ((bytes[i - 1] & 0x0f) << 4) | (bytes[i] >> 4);
-  }
-  if (len > 0) buf[len + 1] = (bytes[len - 1] & 0x0f) << 4;
+  // Mode indicator: 0100 (byte mode)
+  bs.put(0b0100, 4);
+  // Character count (8 bits for v1-9)
+  bs.put(len, 8);
+  // Data bytes
+  for (let i = 0; i < len; i++) bs.put(bytes[i], 8);
+  // Terminator (up to 4 zeros)
+  const terminatorLen = Math.min(4, vi.dataCW * 8 - bs.length);
+  bs.put(0, terminatorLen);
+  // Pad to byte boundary
+  while (bs.length % 8 !== 0) bs.put(0, 1);
 
-  // Pad with 0xEC, 0x11
-  let pi = len + 2;
+  const buf = bs.getBytes(vi.dataCW);
+
+  // Fill remaining with 0xEC, 0x11 padding
+  let pi = Math.ceil(bs.length / 8);
   let pad = 0xEC;
-  while (pi < dataCW) { buf[pi++] = pad; pad = pad === 0xEC ? 0x11 : 0xEC; }
+  while (pi < vi.dataCW) { buf[pi++] = pad; pad = pad === 0xEC ? 0x11 : 0xEC; }
 
   return buf;
 }
 
 function addECC(dataCW: Uint8Array, version: number): Uint8Array {
   const vi = VERSIONS[version];
-  const ecCW = vi.ecPerBlock;
+  const ecCW = vi.ecCW;
   const nBlocks = vi.blocks;
   const blockSize = Math.floor(dataCW.length / nBlocks);
 
