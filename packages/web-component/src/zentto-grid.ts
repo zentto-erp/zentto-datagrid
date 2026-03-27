@@ -2679,11 +2679,28 @@ export class ZenttoGrid extends LitElement {
     this.theme = isDark ? 'dark' : 'light';
   }
 
+  /** Feature property names that the configurator can toggle */
+  private static _featureProps = [
+    'enableHeaderFilters', 'showTotals', 'enableClipboard', 'enableContextMenu',
+    'enableStatusBar', 'enableMasterDetail', 'enableImport', 'enableRowSelection',
+    'enableEditing', 'enableHeaderMenu', 'enableDragDrop', 'enableToolbar',
+    'showToolbarSearch', 'showToolbarColumns', 'showToolbarDensity',
+    'showToolbarExport', 'showToolbarFilter', 'enableVirtualScroll',
+    'enableUndoRedo', 'enableRangeSelection', 'enablePaste',
+    'enableGrouping', 'enableGroupDropZone', 'groupSubtotals',
+    'enablePivot', 'enableFind', 'enableConfigurator',
+  ] as const;
+
   private async _restoreLayout() {
     if (!this.gridId) return;
     const layout = await loadLayout(this.gridId);
     if (!layout) return;
+
+    // Basic layout
     if (layout.density) this.density = layout.density;
+    if (layout.theme) this.theme = layout.theme as any;
+    if (layout.locale) this.locale = layout.locale as any;
+    if (layout.pageSize) this._pageSize = layout.pageSize;
     if (layout.groupByField) { this.groupField = layout.groupByField; this.enableGrouping = true; this._initGroups(); }
     if (layout.columnWidths) this._columnWidths = layout.columnWidths;
     if (layout.columnVisibility) {
@@ -2693,6 +2710,22 @@ export class ZenttoGrid extends LitElement {
       }
       this._hiddenColumns = hidden;
     }
+    if (layout.sorts && layout.sorts.length > 0) {
+      this._sorts = layout.sorts as any;
+    }
+
+    // Restore all feature toggles from configurator
+    if (layout.features) {
+      for (const [key, value] of Object.entries(layout.features)) {
+        if (typeof value === 'boolean' && key in this) {
+          (this as any)[key] = value;
+        } else if (typeof value === 'string' && key in this) {
+          (this as any)[key] = value;
+        }
+      }
+      // Re-init groups if grouping was restored
+      if (this.enableGrouping && this.groupField) this._initGroups();
+    }
   }
 
   private _persistLayout() {
@@ -2701,11 +2734,28 @@ export class ZenttoGrid extends LitElement {
     for (const col of this.columns) {
       visibility[col.field] = !this._hiddenColumns.has(col.field);
     }
+
+    // Collect all feature toggles
+    const features: Record<string, boolean | string> = {};
+    for (const prop of ZenttoGrid._featureProps) {
+      if (prop in this) {
+        features[prop] = (this as any)[prop];
+      }
+    }
+    // Also save string props from configurator
+    if (this.groupField) features['groupField'] = this.groupField;
+    if (this.groupSort) features['groupSort'] = this.groupSort;
+
     saveLayout(this.gridId, {
       density: this.density,
+      theme: this.theme,
+      locale: this.locale,
+      pageSize: this._pageSize,
       groupByField: this.enableGrouping ? this.groupField : undefined,
       columnWidths: Object.keys(this._columnWidths).length > 0 ? this._columnWidths : undefined,
       columnVisibility: visibility,
+      sorts: this._sorts.length > 0 ? this._sorts : undefined,
+      features,
     });
   }
 
@@ -2739,9 +2789,18 @@ export class ZenttoGrid extends LitElement {
     if (changed.has('groupField') || changed.has('enableGrouping') || changed.has('rows')) {
       if (this.enableGrouping && this.groupField) this._initGroups();
     }
-    // Persist layout on relevant changes
-    if (this.gridId && (changed.has('density') || changed.has('groupField') || changed.has('enableGrouping') || changed.has('_columnWidths') || changed.has('_hiddenColumns'))) {
-      this._persistLayout();
+    // Persist layout on ANY configurator-relevant change
+    if (this.gridId) {
+      const persistKeys = new Set([
+        'density', 'theme', 'locale', 'groupField', 'enableGrouping', '_columnWidths', '_hiddenColumns', '_sorts', '_pageSize',
+        ...ZenttoGrid._featureProps,
+      ]);
+      for (const key of changed.keys()) {
+        if (persistKeys.has(key as string)) {
+          this._persistLayout();
+          break;
+        }
+      }
     }
     // v0.6 — Infinite Scroll setup
     if (changed.has('enableInfiniteScroll') && this.enableInfiniteScroll) {

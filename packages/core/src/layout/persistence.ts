@@ -13,6 +13,15 @@ export interface GridLayout {
   columnVisibility?: Record<string, boolean>;
   density?: 'compact' | 'standard' | 'comfortable';
   groupByField?: string;
+  /** v0.3 — All configurator feature toggles persisted */
+  features?: Record<string, boolean | string>;
+  /** v0.3 — Theme and locale */
+  theme?: string;
+  locale?: string;
+  /** v0.3 — Sorts persisted */
+  sorts?: Array<{ field: string; direction: string }>;
+  /** v0.3 — Page size */
+  pageSize?: number;
 }
 
 function openDb(): Promise<IDBDatabase> {
