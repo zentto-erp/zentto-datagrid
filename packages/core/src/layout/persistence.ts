@@ -1,11 +1,25 @@
 /**
- * Layout persistence via IndexedDB.
- * Saves column order, widths, visibility, density per gridId.
+ * Layout persistence via localStorage (SYNCHRONOUS).
+ *
+ * Why localStorage instead of IndexedDB:
+ * - localStorage.getItem() is SYNCHRONOUS — reads happen BEFORE the first render
+ * - IndexedDB is async — by the time it responds, React/Lit already rendered with defaults
+ * - Layout data is small (<5KB per grid) — well within localStorage limits
  */
 
-const DB_NAME = 'zentto-grid-layouts';
-const STORE_NAME = 'layouts';
-const DB_VERSION = 1;
+import type { PivotConfig } from '../types';
+
+const STORAGE_PREFIX = 'zentto-grid-layout:';
+
+export interface GridChartLayout {
+  open?: boolean;
+  type?: 'bar' | 'line' | 'pie' | 'area' | 'donut' | 'scatter' | 'stacked' | 'combo';
+  xField?: string;
+  yFields?: string[];
+  aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max';
+  title?: string;
+  showLegend?: boolean;
+}
 
 export interface GridLayout {
   columnOrder?: string[];
@@ -13,60 +27,38 @@ export interface GridLayout {
   columnVisibility?: Record<string, boolean>;
   density?: 'compact' | 'standard' | 'comfortable';
   groupByField?: string;
-  /** v0.3 — All configurator feature toggles persisted */
+  groupSort?: 'asc' | 'desc' | '';
   features?: Record<string, boolean | string>;
-  /** v0.3 — Theme and locale */
   theme?: string;
   locale?: string;
-  /** v0.3 — Sorts persisted */
   sorts?: Array<{ field: string; direction: string }>;
-  /** v0.3 — Page size */
   pageSize?: number;
-}
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  freezeRows?: number;
+  freezeCols?: number;
+  viewMode?: 'table' | 'form' | 'cards' | 'kanban' | 'chart';
+  kanbanField?: string;
+  pivotConfig?: PivotConfig;
+  chart?: GridChartLayout;
 }
 
 /**
- * Save grid layout to IndexedDB.
+ * Save grid layout. SYNCHRONOUS.
  */
-export async function saveLayout(gridId: string, layout: GridLayout): Promise<void> {
+export function saveLayout(gridId: string, layout: GridLayout): void {
   try {
-    const db = await openDb();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(layout, gridId);
-    await new Promise<void>((res, rej) => {
-      tx.oncomplete = () => res();
-      tx.onerror = () => rej(tx.error);
-    });
+    localStorage.setItem(STORAGE_PREFIX + gridId, JSON.stringify(layout));
   } catch {
-    // IndexedDB not available (SSR, incognito) — silently ignore
+    // localStorage full or not available (SSR) — silently ignore
   }
 }
 
 /**
- * Load grid layout from IndexedDB.
+ * Load grid layout. SYNCHRONOUS — returns immediately.
  */
-export async function loadLayout(gridId: string): Promise<GridLayout | null> {
+export function loadLayout(gridId: string): GridLayout | null {
   try {
-    const db = await openDb();
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const req = tx.objectStore(STORE_NAME).get(gridId);
-    return new Promise((resolve) => {
-      req.onsuccess = () => resolve(req.result ?? null);
-      req.onerror = () => resolve(null);
-    });
+    const raw = localStorage.getItem(STORAGE_PREFIX + gridId);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -75,12 +67,13 @@ export async function loadLayout(gridId: string): Promise<GridLayout | null> {
 /**
  * Clear layout for a grid.
  */
-export async function clearLayout(gridId: string): Promise<void> {
+export function clearLayout(gridId: string): void {
   try {
-    const db = await openDb();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).delete(gridId);
+    localStorage.removeItem(STORAGE_PREFIX + gridId);
   } catch {
     // noop
   }
 }
+
+// Keep async signatures as aliases for backwards compatibility
+export { saveLayout as saveLayoutSync, loadLayout as loadLayoutSync };

@@ -2689,19 +2689,82 @@ export class ZenttoGrid extends LitElement {
     'enableUndoRedo', 'enableRangeSelection', 'enablePaste',
     'enableGrouping', 'enableGroupDropZone', 'groupSubtotals',
     'enablePivot', 'enableFind', 'enableConfigurator',
+    'enableCreate', 'showViewTable', 'showViewForm', 'showViewCards', 'showViewKanban',
+    'enableTreeData', 'enableInfiniteScroll', 'enableCharts', 'enablePrint',
+    'enableComments', 'enableAudit', 'enableAi',
   ] as const;
 
-  private async _restoreLayout() {
-    if (!this.gridId) return;
-    const layout = await loadLayout(this.gridId);
-    if (!layout) return;
+  /** Guard: don't persist until initial restore is done */
+  private _layoutRestored = false;
 
-    // Basic layout
+  /**
+   * Feature overrides from IndexedDB.
+   * When grid-id is set and layout exists, these OVERRIDE the HTML attributes.
+   * This solves the React re-render problem: React sets attributes on every render,
+   * but _featureOverrides has final say for any feature the user changed via configurator.
+   */
+  private _featureOverrides: Record<string, boolean | string> | null = null;
+
+  /** Get effective value for a feature prop: override wins over attribute */
+  private _feat(prop: string): boolean {
+    if (this._featureOverrides && prop in this._featureOverrides) {
+      return this._featureOverrides[prop] as boolean;
+    }
+    return (this as any)[prop] ?? false;
+  }
+
+  /**
+   * Force-apply feature overrides, retrying over several frames.
+   * React useEffect runs AFTER paint, so we need to re-apply after React is done.
+   */
+  /** Set a feature from configurator — writes to overrides, persists, AND emits event */
+  private _setFeat(prop: string, value: boolean | string) {
+    if (!this._featureOverrides) this._featureOverrides = {};
+    this._featureOverrides[prop] = value;
+    (this as any)[prop] = value;
+    this._persistLayout();
+    this.requestUpdate();
+    // Emit event so React/Vue/Angular can react to configurator changes
+    this._dispatchGridEvent('config-change', { prop, value, features: { ...this._featureOverrides } });
+  }
+
+  /**
+   * Restore layout from localStorage. SYNCHRONOUS — runs before first render.
+   * This is the key: localStorage.getItem() is sync, so we set properties
+   * BEFORE Lit's first render cycle, BEFORE React's useEffect.
+   */
+  private _restoreLayout() {
+    if (!this.gridId) return;
+
+    // SYNCHRONOUS read — this is instant, no await
+    const layout = loadLayout(this.gridId);
+
+    if (!layout) {
+      this._layoutRestored = true;
+      return;
+    }
+
+    // Apply all saved state immediately (before first render)
     if (layout.density) this.density = layout.density;
     if (layout.theme) this.theme = layout.theme as any;
     if (layout.locale) this.locale = layout.locale as any;
     if (layout.pageSize) this._pageSize = layout.pageSize;
-    if (layout.groupByField) { this.groupField = layout.groupByField; this.enableGrouping = true; this._initGroups(); }
+    if (layout.groupByField) { this.groupField = layout.groupByField; this.enableGrouping = true; }
+    if (layout.groupSort) this.groupSort = layout.groupSort as any;
+    if (typeof layout.freezeRows === 'number') this.freezeRows = layout.freezeRows;
+    if (typeof layout.freezeCols === 'number') this.freezeCols = layout.freezeCols;
+    if (layout.viewMode) this.viewMode = layout.viewMode as any;
+    if (layout.kanbanField) this.kanbanField = layout.kanbanField;
+    if (layout.pivotConfig) this.pivotConfig = { ...layout.pivotConfig };
+    if (layout.chart) {
+      this._chartOpen = layout.chart.open ?? this._chartOpen;
+      this._chartType = (layout.chart.type as any) || this._chartType;
+      this._chartXField = layout.chart.xField || this._chartXField;
+      this._chartYFields = layout.chart.yFields ? [...layout.chart.yFields] : this._chartYFields;
+      this._chartAgg = (layout.chart.aggregation as any) || this._chartAgg;
+      this._chartTitle = layout.chart.title || this._chartTitle;
+      if (typeof layout.chart.showLegend === 'boolean') this._chartShowLegend = layout.chart.showLegend;
+    }
     if (layout.columnWidths) this._columnWidths = layout.columnWidths;
     if (layout.columnVisibility) {
       const hidden = new Set<string>();
@@ -2714,37 +2777,41 @@ export class ZenttoGrid extends LitElement {
       this._sorts = layout.sorts as any;
     }
 
-    // Restore all feature toggles from configurator
-    if (layout.features) {
+    // Restore feature overrides — these BLOCK future attribute changes from React
+    if (layout.features && Object.keys(layout.features).length > 0) {
+      this._featureOverrides = { ...layout.features };
       for (const [key, value] of Object.entries(layout.features)) {
-        if (typeof value === 'boolean' && key in this) {
-          (this as any)[key] = value;
-        } else if (typeof value === 'string' && key in this) {
+        if (key in this) {
           (this as any)[key] = value;
         }
       }
-      // Re-init groups if grouping was restored
-      if (this.enableGrouping && this.groupField) this._initGroups();
     }
+
+    this._layoutRestored = true;
+    this._dispatchGridEvent('layout-restored', { gridId: this.gridId, layout });
   }
 
   private _persistLayout() {
     if (!this.gridId) return;
+    if (!this._layoutRestored) return;
     const visibility: Record<string, boolean> = {};
     for (const col of this.columns) {
       visibility[col.field] = !this._hiddenColumns.has(col.field);
     }
 
-    // Collect all feature toggles
+    // Collect all feature toggles — override wins over raw Lit property
+    // (React re-renders overwrite Lit properties, but _featureOverrides
+    //  preserves what the user chose via the configurator panel)
     const features: Record<string, boolean | string> = {};
     for (const prop of ZenttoGrid._featureProps) {
       if (prop in this) {
-        features[prop] = (this as any)[prop];
+        features[prop] = this._featureOverrides && prop in this._featureOverrides
+          ? this._featureOverrides[prop]
+          : (this as any)[prop];
       }
     }
     // Also save string props from configurator
     if (this.groupField) features['groupField'] = this.groupField;
-    if (this.groupSort) features['groupSort'] = this.groupSort;
 
     saveLayout(this.gridId, {
       density: this.density,
@@ -2752,6 +2819,21 @@ export class ZenttoGrid extends LitElement {
       locale: this.locale,
       pageSize: this._pageSize,
       groupByField: this.enableGrouping ? this.groupField : undefined,
+      groupSort: this.groupSort || undefined,
+      freezeRows: this.freezeRows || undefined,
+      freezeCols: this.freezeCols || undefined,
+      viewMode: this.viewMode !== 'table' ? this.viewMode : undefined,
+      kanbanField: this.kanbanField || undefined,
+      pivotConfig: this.enablePivot && this.pivotConfig ? { ...this.pivotConfig } : undefined,
+      chart: this.enableCharts ? {
+        open: this._chartOpen,
+        type: this._chartType,
+        xField: this._chartXField || undefined,
+        yFields: this._chartYFields.length > 0 ? [...this._chartYFields] : undefined,
+        aggregation: this._chartAgg,
+        title: this._chartTitle || undefined,
+        showLegend: this._chartShowLegend,
+      } : undefined,
       columnWidths: Object.keys(this._columnWidths).length > 0 ? this._columnWidths : undefined,
       columnVisibility: visibility,
       sorts: this._sorts.length > 0 ? this._sorts : undefined,
@@ -2789,10 +2871,26 @@ export class ZenttoGrid extends LitElement {
     if (changed.has('groupField') || changed.has('enableGrouping') || changed.has('rows')) {
       if (this.enableGrouping && this.groupField) this._initGroups();
     }
+
+    // Re-apply feature overrides when React/framework sets attributes externally.
+    // This ensures user's configurator choices survive React re-renders.
+    if (this._featureOverrides && this._layoutRestored) {
+      for (const key of changed.keys()) {
+        if (this._featureOverrides && (key as string) in this._featureOverrides) {
+          const override = this._featureOverrides[key as string];
+          if ((this as any)[key] !== override) {
+            (this as any)[key] = override;
+          }
+        }
+      }
+    }
+
     // Persist layout on ANY configurator-relevant change
-    if (this.gridId) {
+    if (this.gridId && this._layoutRestored) {
       const persistKeys = new Set([
-        'density', 'theme', 'locale', 'groupField', 'enableGrouping', '_columnWidths', '_hiddenColumns', '_sorts', '_pageSize',
+        'density', 'theme', 'locale', 'groupField', 'groupSort', 'enableGrouping', 'freezeRows', 'freezeCols',
+        'viewMode', 'kanbanField', 'pivotConfig', '_columnWidths', '_hiddenColumns', '_sorts', '_pageSize',
+        '_chartOpen', '_chartType', '_chartXField', '_chartYFields', '_chartAgg', '_chartTitle', '_chartShowLegend',
         ...ZenttoGrid._featureProps,
       ]);
       for (const key of changed.keys()) {
@@ -3530,7 +3628,12 @@ export class ZenttoGrid extends LitElement {
     return html`
       <div class="zg-config-switch" title=${tooltip || label}>
         <label class="zg-toggle">
-          <input type="checkbox" .checked=${checked} @change=${(e: Event) => onChange((e.target as HTMLInputElement).checked)} />
+          <input type="checkbox" .checked=${checked} @change=${(e: Event) => {
+            const val = (e.target as HTMLInputElement).checked;
+            onChange(val);
+            // Persist after any configurator toggle
+            if (this.gridId) this._persistLayout();
+          }} />
           <span class="zg-toggle-track"></span>
           <span class="zg-toggle-thumb"></span>
         </label>
@@ -3605,68 +3708,71 @@ export class ZenttoGrid extends LitElement {
 
   // ─── Tab: Features ──────────────────────────────────
   private _renderConfigFeatures() {
+    // Helper: use _setFeat so changes persist to IndexedDB AND block React overwrites
+    const sf = (prop: string, v: boolean) => this._setFeat(prop, v);
     return html`
       <div class="zg-config-section">${this._t('Funciones', 'Features')}</div>
-      ${this._renderConfigSwitch(this._t('Filtros en headers', 'Header filters'), this.enableHeaderFilters, v => { this.enableHeaderFilters = v; }, this._t('Inputs de filtro debajo de cada columna', 'Filter inputs below each column header'))}
-      ${this._renderConfigSwitch(this._t('Fila de totales', 'Totals row'), this.showTotals, v => { this.showTotals = v; }, this._t('Muestra totales al final', 'Shows totals at the bottom'))}
-      ${this._renderConfigSwitch(this._t('Portapapeles (Ctrl+C)', 'Clipboard (Ctrl+C)'), this.enableClipboard, v => { this.enableClipboard = v; }, this._t('Copiar datos', 'Copy data'))}
-      ${this._renderConfigSwitch(this._t('Menu contextual', 'Context menu'), this.enableContextMenu, v => { this.enableContextMenu = v; }, this._t('Click derecho sobre celdas', 'Right-click on cells'))}
-      ${this._renderConfigSwitch(this._t('Barra de estado', 'Status bar'), this.enableStatusBar, v => { this.enableStatusBar = v; }, this._t('Conteo y agregaciones en footer', 'Count and aggregations in footer'))}
-      ${this._renderConfigSwitch(this._t('Maestro-detalle', 'Master-detail'), this.enableMasterDetail, v => { this.enableMasterDetail = v; }, this._t('Expandir filas', 'Expand rows'))}
-      ${this._renderConfigSwitch(this._t('Importar datos', 'Import data'), this.enableImport, v => { this.enableImport = v; }, this._t('Excel, CSV o JSON', 'Excel, CSV or JSON'))}
-      ${this._renderConfigSwitch(this._t('Seleccion de filas', 'Row selection'), this.enableRowSelection, v => { this.enableRowSelection = v; }, this._t('Checkboxes para seleccionar', 'Checkboxes to select'))}
-      ${this._renderConfigSwitch(this._t('Edicion en linea', 'Inline editing'), this.enableEditing, v => { this.enableEditing = v; }, this._t('Click en celda para editar (tipo Excel)', 'Click cell to edit (Excel-like)'))}
-      ${this._renderConfigSwitch(this._t('Menu de columna', 'Column menu'), this.enableHeaderMenu, v => { this.enableHeaderMenu = v; }, this._t('Menu de 3 puntos en headers', 'Three-dot menu on headers'))}
-      ${this._renderConfigSwitch(this._t('Arrastrar filas', 'Drag & drop'), this.enableDragDrop, v => { this.enableDragDrop = v; }, this._t('Reordenar filas arrastrando', 'Reorder rows by dragging'))}
-      ${this._renderConfigSwitch(this._t('Seleccion de rango', 'Range selection'), this.enableRangeSelection, v => { this.enableRangeSelection = v; }, this._t('Seleccionar celdas arrastrando como Excel', 'Select cells by dragging like Excel'))}
-      ${this._renderConfigSwitch(this._t('Pegar desde Excel', 'Paste from Excel'), this.enablePaste, v => { this.enablePaste = v; }, this._t('Ctrl+V para pegar datos desde Excel/Sheets', 'Ctrl+V to paste data from Excel/Sheets'))}
-      ${this._renderConfigSwitch(this._t('Deshacer/Rehacer', 'Undo/Redo'), this.enableUndoRedo, v => { this.enableUndoRedo = v; }, this._t('Ctrl+Z / Ctrl+Y para deshacer y rehacer', 'Ctrl+Z / Ctrl+Y to undo and redo'))}
-      ${this._renderConfigSwitch(this._t('Virtual Scroll', 'Virtual Scroll'), this.enableVirtualScroll, v => { this.enableVirtualScroll = v; }, this._t('Rendimiento para 100K+ filas', 'Performance for 100K+ rows'))}
+      ${this._renderConfigSwitch(this._t('Filtros en headers', 'Header filters'), this.enableHeaderFilters, v => sf('enableHeaderFilters', v), this._t('Inputs de filtro debajo de cada columna', 'Filter inputs below each column header'))}
+      ${this._renderConfigSwitch(this._t('Fila de totales', 'Totals row'), this.showTotals, v => sf('showTotals', v), this._t('Muestra totales al final', 'Shows totals at the bottom'))}
+      ${this._renderConfigSwitch(this._t('Portapapeles (Ctrl+C)', 'Clipboard (Ctrl+C)'), this.enableClipboard, v => sf('enableClipboard', v), this._t('Copiar datos', 'Copy data'))}
+      ${this._renderConfigSwitch(this._t('Menu contextual', 'Context menu'), this.enableContextMenu, v => sf('enableContextMenu', v), this._t('Click derecho sobre celdas', 'Right-click on cells'))}
+      ${this._renderConfigSwitch(this._t('Barra de estado', 'Status bar'), this.enableStatusBar, v => sf('enableStatusBar', v), this._t('Conteo y agregaciones en footer', 'Count and aggregations in footer'))}
+      ${this._renderConfigSwitch(this._t('Maestro-detalle', 'Master-detail'), this.enableMasterDetail, v => sf('enableMasterDetail', v), this._t('Expandir filas', 'Expand rows'))}
+      ${this._renderConfigSwitch(this._t('Importar datos', 'Import data'), this.enableImport, v => sf('enableImport', v), this._t('Excel, CSV o JSON', 'Excel, CSV or JSON'))}
+      ${this._renderConfigSwitch(this._t('Seleccion de filas', 'Row selection'), this.enableRowSelection, v => sf('enableRowSelection', v), this._t('Checkboxes para seleccionar', 'Checkboxes to select'))}
+      ${this._renderConfigSwitch(this._t('Edicion en linea', 'Inline editing'), this.enableEditing, v => sf('enableEditing', v), this._t('Click en celda para editar (tipo Excel)', 'Click cell to edit (Excel-like)'))}
+      ${this._renderConfigSwitch(this._t('Menu de columna', 'Column menu'), this.enableHeaderMenu, v => sf('enableHeaderMenu', v), this._t('Menu de 3 puntos en headers', 'Three-dot menu on headers'))}
+      ${this._renderConfigSwitch(this._t('Arrastrar filas', 'Drag & drop'), this.enableDragDrop, v => sf('enableDragDrop', v), this._t('Reordenar filas arrastrando', 'Reorder rows by dragging'))}
+      ${this._renderConfigSwitch(this._t('Seleccion de rango', 'Range selection'), this.enableRangeSelection, v => sf('enableRangeSelection', v), this._t('Seleccionar celdas arrastrando como Excel', 'Select cells by dragging like Excel'))}
+      ${this._renderConfigSwitch(this._t('Pegar desde Excel', 'Paste from Excel'), this.enablePaste, v => sf('enablePaste', v), this._t('Ctrl+V para pegar datos desde Excel/Sheets', 'Ctrl+V to paste data from Excel/Sheets'))}
+      ${this._renderConfigSwitch(this._t('Deshacer/Rehacer', 'Undo/Redo'), this.enableUndoRedo, v => sf('enableUndoRedo', v), this._t('Ctrl+Z / Ctrl+Y para deshacer y rehacer', 'Ctrl+Z / Ctrl+Y to undo and redo'))}
+      ${this._renderConfigSwitch(this._t('Virtual Scroll', 'Virtual Scroll'), this.enableVirtualScroll, v => sf('enableVirtualScroll', v), this._t('Rendimiento para 100K+ filas', 'Performance for 100K+ rows'))}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">${this._t('Barra de herramientas', 'Toolbar')}</div>
-      ${this._renderConfigSwitch(this._t('Mostrar toolbar', 'Show toolbar'), this.enableToolbar, v => { this.enableToolbar = v; }, this._t('Barra superior con busqueda y botones', 'Top bar with search and buttons'))}
+      ${this._renderConfigSwitch(this._t('Mostrar toolbar', 'Show toolbar'), this.enableToolbar, v => sf('enableToolbar', v), this._t('Barra superior con busqueda y botones', 'Top bar with search and buttons'))}
       ${this.enableToolbar ? html`
-        ${this._renderConfigSwitch(this._t('Busqueda rapida', 'Quick search'), this.showToolbarSearch, v => { this.showToolbarSearch = v; }, this._t('Campo de busqueda global', 'Global search field'))}
-        ${this._renderConfigSwitch(this._t('Selector de columnas', 'Column chooser'), this.showToolbarColumns, v => { this.showToolbarColumns = v; }, this._t('Ocultar/mostrar columnas', 'Hide/show columns'))}
-        ${this._renderConfigSwitch(this._t('Selector de densidad', 'Density picker'), this.showToolbarDensity, v => { this.showToolbarDensity = v; }, this._t('Compacto, normal, amplio', 'Compact, standard, comfortable'))}
-        ${this._renderConfigSwitch(this._t('Botones de exportar', 'Export buttons'), this.showToolbarExport, v => { this.showToolbarExport = v; }, this._t('CSV, Excel, JSON', 'CSV, Excel, JSON'))}
-        ${this._renderConfigSwitch(this._t('Boton de filtros', 'Filter button'), this.showToolbarFilter, v => { this.showToolbarFilter = v; }, this._t('Panel de filtros avanzados', 'Advanced filter panel'))}
-        ${this._renderConfigSwitch(this._t('Boton crear', 'Create button'), this.enableCreate, v => { this.enableCreate = v; }, this._t('Boton para crear nuevo registro', 'Button to create new record'))}
+        ${this._renderConfigSwitch(this._t('Busqueda rapida', 'Quick search'), this.showToolbarSearch, v => sf('showToolbarSearch', v), this._t('Campo de busqueda global', 'Global search field'))}
+        ${this._renderConfigSwitch(this._t('Selector de columnas', 'Column chooser'), this.showToolbarColumns, v => sf('showToolbarColumns', v), this._t('Ocultar/mostrar columnas', 'Hide/show columns'))}
+        ${this._renderConfigSwitch(this._t('Selector de densidad', 'Density picker'), this.showToolbarDensity, v => sf('showToolbarDensity', v), this._t('Compacto, normal, amplio', 'Compact, standard, comfortable'))}
+        ${this._renderConfigSwitch(this._t('Botones de exportar', 'Export buttons'), this.showToolbarExport, v => sf('showToolbarExport', v), this._t('CSV, Excel, JSON', 'CSV, Excel, JSON'))}
+        ${this._renderConfigSwitch(this._t('Boton de filtros', 'Filter button'), this.showToolbarFilter, v => sf('showToolbarFilter', v), this._t('Panel de filtros avanzados', 'Advanced filter panel'))}
+        ${this._renderConfigSwitch(this._t('Boton crear', 'Create button'), this.enableCreate, v => sf('enableCreate', v), this._t('Boton para crear nuevo registro', 'Button to create new record'))}
       ` : nothing}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">${this._t('Vistas', 'Views')}</div>
-      ${this._renderConfigSwitch(this._t('Vista tabla', 'Table view'), this.showViewTable, v => { this.showViewTable = v; if (!v && this.viewMode === 'table') this.viewMode = 'form'; }, this._t('Filas y columnas clasicas', 'Classic rows and columns'))}
-      ${this._renderConfigSwitch(this._t('Vista formulario', 'Form view'), this.showViewForm, v => { this.showViewForm = v; }, this._t('Un registro a la vez', 'One record at a time'))}
-      ${this._renderConfigSwitch(this._t('Vista tarjetas', 'Cards view'), this.showViewCards, v => { this.showViewCards = v; }, this._t('Grid de tarjetas', 'Card grid'))}
-      ${this._renderConfigSwitch(this._t('Vista kanban', 'Kanban view'), this.showViewKanban, v => { this.showViewKanban = v; }, this._t('Columnas por estado', 'Columns by status'))}
+      ${this._renderConfigSwitch(this._t('Vista tabla', 'Table view'), this.showViewTable, v => { sf('showViewTable', v); if (!v && this.viewMode === 'table') this.viewMode = 'form'; }, this._t('Filas y columnas clasicas', 'Classic rows and columns'))}
+      ${this._renderConfigSwitch(this._t('Vista formulario', 'Form view'), this.showViewForm, v => sf('showViewForm', v), this._t('Un registro a la vez', 'One record at a time'))}
+      ${this._renderConfigSwitch(this._t('Vista tarjetas', 'Cards view'), this.showViewCards, v => sf('showViewCards', v), this._t('Grid de tarjetas', 'Card grid'))}
+      ${this._renderConfigSwitch(this._t('Vista kanban', 'Kanban view'), this.showViewKanban, v => sf('showViewKanban', v), this._t('Columnas por estado', 'Columns by status'))}
 
     `;
   }
 
   // ─── Tab: Advanced (v0.4-v0.8) ──────────────────────
   private _renderConfigAdvanced() {
+    const sf = (prop: string, v: boolean) => this._setFeat(prop, v);
     return html`
       <div class="zg-config-section">v0.5 — ${this._t('Estructura', 'Structure')}</div>
-      ${this._renderConfigSwitch(this._t('Datos jerarquicos', 'Tree data'), this.enableTreeData, v => { this.enableTreeData = v; }, this._t('Expandir/colapsar nodos padre-hijo', 'Expand/collapse parent-child nodes'))}
+      ${this._renderConfigSwitch(this._t('Datos jerarquicos', 'Tree data'), this.enableTreeData, v => sf('enableTreeData', v), this._t('Expandir/colapsar nodos padre-hijo', 'Expand/collapse parent-child nodes'))}
       ${this._renderConfigSwitch(this._t('Congelar filas', 'Freeze rows'), this.freezeRows > 0, v => { this.freezeRows = v ? 1 : 0; }, this._t('Filas fijas al hacer scroll vertical', 'Rows stay fixed during vertical scroll'))}
       ${this._renderConfigSwitch(this._t('Congelar columnas', 'Freeze columns'), this.freezeCols > 0, v => { this.freezeCols = v ? 2 : 0; }, this._t('Columnas fijas al hacer scroll horizontal', 'Columns stay fixed during horizontal scroll'))}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">v0.6 — ${this._t('Servidor', 'Server')}</div>
-      ${this._renderConfigSwitch(this._t('Scroll infinito', 'Infinite scroll'), this.enableInfiniteScroll, v => { this.enableInfiniteScroll = v; }, this._t('Cargar mas filas al hacer scroll', 'Load more rows on scroll'))}
+      ${this._renderConfigSwitch(this._t('Scroll infinito', 'Infinite scroll'), this.enableInfiniteScroll, v => sf('enableInfiniteScroll', v), this._t('Cargar mas filas al hacer scroll', 'Load more rows on scroll'))}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">v0.7 — ${this._t('Visualizacion', 'Visualization')}</div>
-      ${this._renderConfigSwitch(this._t('Graficos', 'Charts'), this.enableCharts, v => { this.enableCharts = v; }, this._t('Boton de graficos en toolbar (bar, line, pie, donut)', 'Chart button in toolbar (bar, line, pie, donut)'))}
-      ${this._renderConfigSwitch(this._t('Imprimir', 'Print'), this.enablePrint, v => { this.enablePrint = v; }, this._t('Boton de impresion en toolbar', 'Print button in toolbar'))}
-      ${this._renderConfigSwitch(this._t('Notas en celdas', 'Cell comments'), this.enableComments, v => { this.enableComments = v; }, this._t('Click derecho para agregar notas con indicador naranja', 'Right-click to add notes with orange indicator'))}
+      ${this._renderConfigSwitch(this._t('Graficos', 'Charts'), this.enableCharts, v => sf('enableCharts', v), this._t('Boton de graficos en toolbar (bar, line, pie, donut)', 'Chart button in toolbar (bar, line, pie, donut)'))}
+      ${this._renderConfigSwitch(this._t('Imprimir', 'Print'), this.enablePrint, v => sf('enablePrint', v), this._t('Boton de impresion en toolbar', 'Print button in toolbar'))}
+      ${this._renderConfigSwitch(this._t('Notas en celdas', 'Cell comments'), this.enableComments, v => sf('enableComments', v), this._t('Click derecho para agregar notas con indicador naranja', 'Right-click to add notes with orange indicator'))}
 
       <div class="zg-config-divider"></div>
       <div class="zg-config-section">v0.8 — Premium</div>
-      ${this._renderConfigSwitch(this._t('Auditoria', 'Audit trail'), this.enableAudit, v => { this.enableAudit = v; }, this._t('Rastrea quien cambio que y cuando. Punto azul en celdas editadas', 'Track who changed what and when. Blue dot on edited cells'))}
-      ${this._renderConfigSwitch(this._t('Columnas IA', 'AI Columns'), this.enableAi, v => { this.enableAi = v; }, this._t('Activar/desactivar columnas generativas con IA. Requiere API key configurada', 'Enable/disable AI generative columns. Requires API key configured'))}
+      ${this._renderConfigSwitch(this._t('Auditoria', 'Audit trail'), this.enableAudit, v => sf('enableAudit', v), this._t('Rastrea quien cambio que y cuando. Punto azul en celdas editadas', 'Track who changed what and when. Blue dot on edited cells'))}
+      ${this._renderConfigSwitch(this._t('Columnas IA', 'AI Columns'), this.enableAi, v => sf('enableAi', v), this._t('Activar/desactivar columnas generativas con IA. Requiere API key configurada', 'Enable/disable AI generative columns. Requires API key configured'))}
     `;
   }
 
@@ -3687,11 +3793,12 @@ export class ZenttoGrid extends LitElement {
     const hasPivotData = numCols.length > 0 && textCols.length >= 2;
     const aggLabels: Record<string, string> = { sum: this._t('Suma', 'Sum'), avg: this._t('Promedio', 'Avg'), count: this._t('Conteo', 'Count'), min: 'Min', max: 'Max' };
     const pc = this._ensurePivotConfig();
+    const sf = (prop: string, v: boolean) => this._setFeat(prop, v);
 
     return html`
       <div class="zg-config-section">Pivot</div>
       ${this._renderConfigSwitch(this._t('Modo Pivot', 'Pivot Mode'), this.enablePivot, v => {
-        this.enablePivot = v;
+        sf('enablePivot', v);
         if (v && !this.pivotConfig) {
           // Auto-initialize with best guess from columns
           const textCols = this._textColumns;
@@ -3767,9 +3874,10 @@ export class ZenttoGrid extends LitElement {
   // ─── Tab: Groups ─────────────────────────────────────
   private _renderConfigGroups() {
     const groupable = this._groupableColumns.length > 0 ? this._groupableColumns : this._textColumns;
+    const sf = (prop: string, v: boolean) => this._setFeat(prop, v);
     return html`
       <div class="zg-config-section">${this._t('Grupos', 'Groups')}</div>
-      ${this._renderConfigSwitch(this._t('Agrupar filas', 'Row Groups'), this.enableGrouping, v => { this.enableGrouping = v; if (!v) { this.groupField = ''; } }, this._t('Agrupa filas por un campo con subtotales', 'Group rows by a field with subtotals'))}
+      ${this._renderConfigSwitch(this._t('Agrupar filas', 'Row Groups'), this.enableGrouping, v => { sf('enableGrouping', v); if (!v) { this.groupField = ''; } }, this._t('Agrupa filas por un campo con subtotales', 'Group rows by a field with subtotals'))}
 
       ${this.enableGrouping ? html`
         <span class="zg-config-hint">${this._t('Agrupar filas por campo', 'Group rows by field')}</span>
@@ -3782,7 +3890,7 @@ export class ZenttoGrid extends LitElement {
         ${this.groupField ? html`
           <span class="zg-config-chip">
             ${this.columns.find(c => c.field === this.groupField)?.header || this.groupField}
-            <button class="zg-config-chip-x" @click=${() => { this.groupField = ''; this.enableGrouping = false; }}>${this._iconHtml('close')}</button>
+            <button class="zg-config-chip-x" @click=${() => { this.groupField = ''; this._setFeat('enableGrouping', false); }}>${this._iconHtml('close')}</button>
           </span>
         ` : nothing}
 
@@ -3792,10 +3900,10 @@ export class ZenttoGrid extends LitElement {
           v => { this.groupSort = v as any; }
         )}
 
-        ${this._renderConfigSwitch(this._t('Subtotales', 'Subtotals'), this.groupSubtotals, v => { this.groupSubtotals = v; })}
+        ${this._renderConfigSwitch(this._t('Subtotales', 'Subtotals'), this.groupSubtotals, v => sf('groupSubtotals', v))}
 
         <div class="zg-config-divider"></div>
-        ${this._renderConfigSwitch(this._t('Zona de arrastre', 'Drop zone'), this.enableGroupDropZone, v => { this.enableGroupDropZone = v; }, this._t('Arrastra columnas al panel para agrupar', 'Drag column headers to group'))}
+        ${this._renderConfigSwitch(this._t('Zona de arrastre', 'Drop zone'), this.enableGroupDropZone, v => sf('enableGroupDropZone', v), this._t('Arrastra columnas al panel para agrupar', 'Drag column headers to group'))}
       ` : html`
         <span class="zg-config-hint">${this._t(
           'Activa Row Groups para agrupar filas por un campo.',
