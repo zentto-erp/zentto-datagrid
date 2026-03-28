@@ -1,9 +1,9 @@
 name: Release & Publish
 
 on:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
+    branches: [main]
+    types: [closed]
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +20,7 @@ env:
 
 jobs:
   build:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     name: Build & Verify
     runs-on: ubuntu-latest
     steps:

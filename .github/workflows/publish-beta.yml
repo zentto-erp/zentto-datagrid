@@ -1,0 +1,36 @@
+name: Publish Beta
+
+on:
+  push:
+    branches: [developer]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npx turbo build
+      - name: Compute beta version
+        id: version
+        run: |
+          BASE=$(node -p "require('./packages/core/package.json').version")
+          LATEST=$(npm view @zentto/datagrid-core dist-tags.beta 2>/dev/null || echo "")
+          if echo "$LATEST" | grep -q "${BASE}-beta."; then
+            NUM=$(echo "$LATEST" | grep -oP 'beta\.\K\d+')
+            BETA="${BASE}-beta.$((NUM + 1))"
+          else
+            BETA="${BASE}-beta.1"
+          fi
+          echo "version=$BETA" >> $GITHUB_OUTPUT
+      - name: Set version and publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VER=${{ steps.version.outputs.version }}
+          npm version $VER --no-git-tag-version --workspaces
+          npm publish --access public --tag beta --workspaces
