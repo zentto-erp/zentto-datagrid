@@ -303,7 +303,7 @@ export class ZenttoGrid extends LitElement {
   @property({ type: Boolean, attribute: 'enable-import' }) enableImport = false;
 
   // ─── Built-in Configurator Panel ──────────────────────────────
-  @property({ type: Boolean, attribute: 'enable-configurator' }) enableConfigurator = false;
+  @property({ type: Boolean, attribute: 'enable-configurator' }) enableConfigurator = true;
   /** @deprecated Use enableConfigurator instead */
   @property({ type: Boolean, attribute: 'enable-settings' }) enableSettings = false;
 
@@ -2813,7 +2813,7 @@ export class ZenttoGrid extends LitElement {
     // Also save string props from configurator
     if (this.groupField) features['groupField'] = this.groupField;
 
-    saveLayout(this.gridId, {
+    const layoutSnapshot = {
       density: this.density,
       theme: this.theme,
       locale: this.locale,
@@ -2838,6 +2838,20 @@ export class ZenttoGrid extends LitElement {
       columnVisibility: visibility,
       sorts: this._sorts.length > 0 ? this._sorts : undefined,
       features,
+    };
+
+    saveLayout(this.gridId, layoutSnapshot);
+
+    // Emit full layout snapshot so parent components (studio designer) can persist it
+    this._dispatchGridEvent('layout-persist', {
+      gridId: this.gridId,
+      layout: layoutSnapshot,
+      columns: this.columns.map(c => ({
+        field: c.field, header: c.header, type: c.type,
+        width: c.width, flex: c.flex, minWidth: c.minWidth,
+        sortable: c.sortable, filterable: c.filterable,
+        pin: c.pin, aggregation: c.aggregation, currency: c.currency,
+      })),
     });
   }
 
