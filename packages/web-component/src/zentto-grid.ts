@@ -2793,7 +2793,10 @@ export class ZenttoGrid extends LitElement {
 
   private _persistLayout() {
     if (!this.gridId) return;
-    if (!this._layoutRestored) return;
+    if (!this._layoutRestored) {
+      // First time — mark as restored so subsequent persists work
+      this._layoutRestored = true;
+    }
     const visibility: Record<string, boolean> = {};
     for (const col of this.columns) {
       visibility[col.field] = !this._hiddenColumns.has(col.field);
