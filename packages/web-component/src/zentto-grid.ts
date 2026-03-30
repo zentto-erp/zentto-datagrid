@@ -1174,6 +1174,11 @@ export class ZenttoGrid extends LitElement {
     this._dispatchGridEvent('selection-change', { selectedRows: selected, count: selected.length });
   }
 
+  /** Expose filtered+sorted rows as public getter for report integration */
+  get filteredRows(): GridRow[] {
+    return this._sortedRows.filter(r => !r['__zentto_totals__']);
+  }
+
   /** Expose selected rows as public getter for React interop */
   get selectedRows(): GridRow[] {
     return this._displayRows.filter(r => !r['__zentto_totals__'] && this._selectedRows.has(this._getRowKey(r)));
