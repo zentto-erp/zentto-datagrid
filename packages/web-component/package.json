@@ -1,6 +1,6 @@
 {
   "name": "@zentto/datagrid",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "High-performance data grid web component. 90+ features, 0 framework dependencies. Free & open-source alternative to AG Grid Enterprise and MUI X Premium.",
   "type": "module",
   "main": "dist/zentto-grid.js",
