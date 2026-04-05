@@ -89,8 +89,8 @@ export { processSparklineData, sparklineLinePath, sparklineAreaPath, sparklineBa
 export type { SparklineType, SparklineConfig, SparklineData } from './data/sparkline';
 
 // Layout persistence
-export { saveLayout, loadLayout, clearLayout } from './layout/persistence';
-export type { GridLayout } from './layout/persistence';
+export { saveLayout, loadLayout, clearLayout, configureRemoteCache } from './layout/persistence';
+export type { GridLayout, RemoteCacheConfig } from './layout/persistence';
 
 // v0.5.0 — Tree Data
 export { buildTreeRows, getDescendantIds } from './data/tree';
