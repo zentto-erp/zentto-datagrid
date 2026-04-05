@@ -1,10 +1,11 @@
 /**
- * Layout persistence via localStorage (SYNCHRONOUS).
+ * Layout persistence — localStorage (sync) + zentto-cache (async remote).
  *
- * Why localStorage instead of IndexedDB:
- * - localStorage.getItem() is SYNCHRONOUS — reads happen BEFORE the first render
- * - IndexedDB is async — by the time it responds, React/Lit already rendered with defaults
- * - Layout data is small (<5KB per grid) — well within localStorage limits
+ * Estrategia:
+ * - localStorage.getItem() es SÍNCRONO → layout se aplica ANTES del primer render
+ * - zentto-cache (Redis + PG) es ASÍNCRONO → sync en background después del render
+ * - Al guardar: escribe local + remoto en paralelo
+ * - Al cargar: lee local inmediato, luego intenta remoto y actualiza si difiere
  */
 
 import type { PivotConfig } from '../types';
@@ -41,27 +42,78 @@ export interface GridLayout {
   chart?: GridChartLayout;
 }
 
+/* ══════════════════════════════════════════
+   Remote cache config (zentto-cache)
+   ══════════════════════════════════════════ */
+
+export interface RemoteCacheConfig {
+  baseUrl: string;       // https://cache.zentto.net
+  companyId: string;
+  userId?: string;
+  email?: string;
+  appKey: string;        // x-app-key header
+}
+
+let _remoteConfig: RemoteCacheConfig | null = null;
+
 /**
- * Save grid layout. SYNCHRONOUS.
+ * Configurar remote cache. Llamar una vez al inicializar la app.
+ */
+export function configureRemoteCache(config: RemoteCacheConfig): void {
+  _remoteConfig = config;
+}
+
+/* ══════════════════════════════════════════
+   Local storage (SÍNCRONO)
+   ══════════════════════════════════════════ */
+
+/**
+ * Save grid layout. SYNCHRONOUS + async remote.
  */
 export function saveLayout(gridId: string, layout: GridLayout): void {
+  // 1. Local — síncrono, inmediato
   try {
     localStorage.setItem(STORAGE_PREFIX + gridId, JSON.stringify(layout));
   } catch {
-    // localStorage full or not available (SSR) — silently ignore
+    // localStorage full or not available (SSR)
   }
+
+  // 2. Remote — asíncrono, background
+  saveLayoutRemote(gridId, layout).catch(() => {});
 }
 
 /**
- * Load grid layout. SYNCHRONOUS — returns immediately.
+ * Load grid layout. SYNCHRONOUS — returns immediately from localStorage.
+ * Si hay remote config, intenta sync en background.
  */
 export function loadLayout(gridId: string): GridLayout | null {
+  let local: GridLayout | null = null;
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + gridId);
-    return raw ? JSON.parse(raw) : null;
+    local = raw ? JSON.parse(raw) : null;
   } catch {
-    return null;
+    // noop
   }
+
+  // Intentar sync remoto en background (no bloquea)
+  if (_remoteConfig) {
+    loadLayoutRemote(gridId).then((remote) => {
+      if (remote && JSON.stringify(remote) !== JSON.stringify(local)) {
+        // Remote tiene datos diferentes — actualizar local
+        try {
+          localStorage.setItem(STORAGE_PREFIX + gridId, JSON.stringify(remote));
+        } catch { /* noop */ }
+        // Disparar evento para que el grid se actualice
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('zentto-grid-layout-sync', {
+            detail: { gridId, layout: remote },
+          }));
+        }
+      }
+    }).catch(() => {});
+  }
+
+  return local;
 }
 
 /**
@@ -70,10 +122,63 @@ export function loadLayout(gridId: string): GridLayout | null {
 export function clearLayout(gridId: string): void {
   try {
     localStorage.removeItem(STORAGE_PREFIX + gridId);
-  } catch {
-    // noop
-  }
+  } catch { /* noop */ }
+
+  // También limpiar remoto
+  deleteLayoutRemote(gridId).catch(() => {});
 }
 
-// Keep async signatures as aliases for backwards compatibility
+/* ══════════════════════════════════════════
+   Remote cache (zentto-cache — ASÍNCRONO)
+   ══════════════════════════════════════════ */
+
+async function saveLayoutRemote(gridId: string, layout: GridLayout): Promise<void> {
+  if (!_remoteConfig) return;
+  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+
+  await fetch(`${baseUrl}/v1/grid-layouts/${gridId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-app-key': appKey,
+    },
+    credentials: 'include',
+    body: JSON.stringify({ companyId, userId, email, gridId, layout }),
+  });
+}
+
+async function loadLayoutRemote(gridId: string): Promise<GridLayout | null> {
+  if (!_remoteConfig) return null;
+  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+
+  const params = new URLSearchParams({ companyId });
+  if (userId) params.set('userId', userId);
+  if (email) params.set('email', email);
+
+  const res = await fetch(`${baseUrl}/v1/grid-layouts/${gridId}?${params}`, {
+    headers: { 'x-app-key': appKey },
+    credentials: 'include',
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.layout ?? null;
+}
+
+async function deleteLayoutRemote(gridId: string): Promise<void> {
+  if (!_remoteConfig) return;
+  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+
+  const params = new URLSearchParams({ companyId });
+  if (userId) params.set('userId', userId);
+  if (email) params.set('email', email);
+
+  await fetch(`${baseUrl}/v1/grid-layouts/${gridId}?${params}`, {
+    method: 'DELETE',
+    headers: { 'x-app-key': appKey },
+    credentials: 'include',
+  });
+}
+
+// Backward compat aliases
 export { saveLayout as saveLayoutSync, loadLayout as loadLayoutSync };
