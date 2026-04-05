@@ -51,7 +51,7 @@ export interface RemoteCacheConfig {
   companyId: string;
   userId?: string;
   email?: string;
-  appKey: string;        // x-app-key header
+  appKey?: string;       // x-app-key (solo server-side; en browser usa cookie HttpOnly)
 }
 
 let _remoteConfig: RemoteCacheConfig | null = null;
@@ -132,31 +132,39 @@ export function clearLayout(gridId: string): void {
    Remote cache (zentto-cache — ASÍNCRONO)
    ══════════════════════════════════════════ */
 
+/**
+ * Headers de auth para zentto-cache.
+ * - En browser: cookie HttpOnly zentto_token viaja automáticamente (credentials: include)
+ * - En server/MCP: appKey va en x-app-key header
+ */
+function remoteHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (_remoteConfig?.appKey) headers['x-app-key'] = _remoteConfig.appKey;
+  return headers;
+}
+
 async function saveLayoutRemote(gridId: string, layout: GridLayout): Promise<void> {
   if (!_remoteConfig) return;
-  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+  const { baseUrl, companyId, userId, email } = _remoteConfig;
 
   await fetch(`${baseUrl}/v1/grid-layouts/${gridId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-app-key': appKey,
-    },
-    credentials: 'include',
+    headers: remoteHeaders(),
+    credentials: 'include', // Cookie HttpOnly zentto_token
     body: JSON.stringify({ companyId, userId, email, gridId, layout }),
   });
 }
 
 async function loadLayoutRemote(gridId: string): Promise<GridLayout | null> {
   if (!_remoteConfig) return null;
-  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+  const { baseUrl, companyId, userId, email } = _remoteConfig;
 
   const params = new URLSearchParams({ companyId });
   if (userId) params.set('userId', userId);
   if (email) params.set('email', email);
 
   const res = await fetch(`${baseUrl}/v1/grid-layouts/${gridId}?${params}`, {
-    headers: { 'x-app-key': appKey },
+    headers: remoteHeaders(),
     credentials: 'include',
   });
 
@@ -167,7 +175,7 @@ async function loadLayoutRemote(gridId: string): Promise<GridLayout | null> {
 
 async function deleteLayoutRemote(gridId: string): Promise<void> {
   if (!_remoteConfig) return;
-  const { baseUrl, companyId, userId, email, appKey } = _remoteConfig;
+  const { baseUrl, companyId, userId, email } = _remoteConfig;
 
   const params = new URLSearchParams({ companyId });
   if (userId) params.set('userId', userId);
@@ -175,7 +183,7 @@ async function deleteLayoutRemote(gridId: string): Promise<void> {
 
   await fetch(`${baseUrl}/v1/grid-layouts/${gridId}?${params}`, {
     method: 'DELETE',
-    headers: { 'x-app-key': appKey },
+    headers: remoteHeaders(),
     credentials: 'include',
   });
 }
